@@ -1,0 +1,18 @@
+.yarn
+.yarnrc
+
+node_modules
+
+# build
+/lib/
+
+# NPM debug
+npm-debug.log
+npm-debug.log*
+
+# yarn errors
+yarn-error.log
+
+# next.js
+packages/docs/.next/
+packages/docs/out/

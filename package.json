@@ -1,0 +1,12 @@
+{
+  "name": "fxone",
+  "version": "0.0.0",
+  "description": "monorepo for common tools",
+  "repository": "https://github.com/fxOne/tools.git",
+  "author": "fxOne <fxOne@users.noreply.github.com>",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ]
+}
