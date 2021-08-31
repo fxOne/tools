@@ -1,0 +1,10 @@
+{
+  "name": "@fxone/prettier-config",
+  "version": "1.0.0",
+  "description": "prettier config",
+  "main": "index.js",
+  "repository": "https://github.com/fxOne/tools.git",
+  "author": "fxOne <fxOne@users.noreply.github.com>",
+  "license": "MIT",
+  "private": false
+}
