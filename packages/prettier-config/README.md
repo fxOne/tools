@@ -2,6 +2,8 @@
 
 _This is a configuration for prettier_
 
+## Usage
+
 Installation with yarn:
 
 ```bash
