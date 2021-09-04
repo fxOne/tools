@@ -1,4 +1,4 @@
-module.exports = {
+module.exports = () => ({
   plugins: [
     '@babel/plugin-proposal-object-rest-spread',
     '@babel/plugin-proposal-class-properties',
@@ -20,4 +20,4 @@ module.exports = {
     ],
     '@babel/preset-typescript',
   ],
-};
+});
