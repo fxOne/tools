@@ -1,6 +1,6 @@
 {
   "name": "@fxone/prettier-config",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "prettier config",
   "main": "index.js",
   "repository": "https://github.com/fxOne/tools.git",
@@ -8,6 +8,6 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "prettier": "^2.4.1"
+    "prettier": "^2.5.1"
   }
 }
