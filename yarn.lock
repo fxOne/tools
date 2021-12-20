@@ -60,15 +60,6 @@
     jsesc "^2.5.1"
     source-map "^0.5.0"
 
-"@babel/generator@^7.16.5":
-  version "7.16.5"
-  resolved "https://registry.yarnpkg.com/@babel/generator/-/generator-7.16.5.tgz#26e1192eb8f78e0a3acaf3eede3c6fc96d22bedf"
-  integrity sha512-kIvCdjZqcdKqoDbVVdt5R99icaRtrtYhYK/xux5qiWCBmfdvEYMFZ68QCrpE5cbFM1JsuArUNs1ZkuKtTtUcZA==
-  dependencies:
-    "@babel/types" "^7.16.0"
-    jsesc "^2.5.1"
-    source-map "^0.5.0"
-
 "@babel/helper-annotate-as-pure@^7.16.0":
   version "7.16.0"
   resolved "https://registry.yarnpkg.com/@babel/helper-annotate-as-pure/-/helper-annotate-as-pure-7.16.0.tgz#9a1f0ebcda53d9a2d00108c4ceace6a5d5f1f08d"
@@ -205,7 +196,7 @@
   resolved "https://registry.yarnpkg.com/@babel/helper-plugin-utils/-/helper-plugin-utils-7.16.5.tgz#afe37a45f39fce44a3d50a7958129ea5b1a5c074"
   integrity sha512-59KHWHXxVA9K4HNF4sbHCf+eJeFe0Te/ZFGqBT4OjXhrwvA04sGfaEGsVTdsjoszq0YTP49RC9UKe5g8uN2RwQ==
 
-"@babel/helper-remap-async-to-generator@^7.16.4", "@babel/helper-remap-async-to-generator@^7.16.5":
+"@babel/helper-remap-async-to-generator@^7.16.5":
   version "7.16.5"
   resolved "https://registry.yarnpkg.com/@babel/helper-remap-async-to-generator/-/helper-remap-async-to-generator-7.16.5.tgz#e706646dc4018942acb4b29f7e185bc246d65ac3"
   integrity sha512-X+aAJldyxrOmN9v3FKp+Hu1NO69VWgYgDGq6YDykwRPzxs5f2N+X988CBXS7EQahDU+Vpet5QYMqLk+nsp+Qxw==
@@ -300,11 +291,6 @@
   resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.16.6.tgz#8f194828193e8fa79166f34a4b4e52f3e769a314"
   integrity sha512-Gr86ujcNuPDnNOY8mi383Hvi8IYrJVJYuf3XcuBM/Dgd+bINn/7tHqsj+tKkoreMbmGsFLsltI/JJd8fOFWGDQ==
 
-"@babel/parser@^7.16.5":
-  version "7.16.6"
-  resolved "https://registry.yarnpkg.com/@babel/parser/-/parser-7.16.6.tgz#8f194828193e8fa79166f34a4b4e52f3e769a314"
-  integrity sha512-Gr86ujcNuPDnNOY8mi383Hvi8IYrJVJYuf3XcuBM/Dgd+bINn/7tHqsj+tKkoreMbmGsFLsltI/JJd8fOFWGDQ==
-
 "@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression@^7.16.2":
   version "7.16.2"
   resolved "https://registry.yarnpkg.com/@babel/plugin-bugfix-safari-id-destructuring-collision-in-function-expression/-/plugin-bugfix-safari-id-destructuring-collision-in-function-expression-7.16.2.tgz#2977fca9b212db153c195674e57cfab807733183"
@@ -321,13 +307,13 @@
     "@babel/helper-skip-transparent-expression-wrappers" "^7.16.0"
     "@babel/plugin-proposal-optional-chaining" "^7.16.0"
 
-"@babel/plugin-proposal-async-generator-functions@^7.16.4":
-  version "7.16.4"
-  resolved "https://registry.yarnpkg.com/@babel/plugin-proposal-async-generator-functions/-/plugin-proposal-async-generator-functions-7.16.4.tgz#e606eb6015fec6fa5978c940f315eae4e300b081"
-  integrity sha512-/CUekqaAaZCQHleSK/9HajvcD/zdnJiKRiuUFq8ITE+0HsPzquf53cpFiqAwl/UfmJbR6n5uGPQSPdrmKOvHHg==
+"@babel/plugin-proposal-async-generator-functions@^7.16.4", "@babel/plugin-proposal-async-generator-functions@^7.16.5":
+  version "7.16.5"
+  resolved "https://registry.yarnpkg.com/@babel/plugin-proposal-async-generator-functions/-/plugin-proposal-async-generator-functions-7.16.5.tgz#fd3bd7e0d98404a3d4cbca15a72d533f8c9a2f67"
+  integrity sha512-C/FX+3HNLV6sz7AqbTQqEo1L9/kfrKjxcVtgyBCmvIgOjvuBVUWooDoi7trsLxOzCEo5FccjRvKHkfDsJFZlfA==
   dependencies:
-    "@babel/helper-plugin-utils" "^7.14.5"
-    "@babel/helper-remap-async-to-generator" "^7.16.4"
+    "@babel/helper-plugin-utils" "^7.16.5"
+    "@babel/helper-remap-async-to-generator" "^7.16.5"
     "@babel/plugin-syntax-async-generators" "^7.8.4"
 
 "@babel/plugin-proposal-class-properties@^7.14.5", "@babel/plugin-proposal-class-properties@^7.16.0":
@@ -954,22 +940,6 @@
     "@babel/types" "^7.16.0"
 
 "@babel/traverse@^7.13.0", "@babel/traverse@^7.16.0", "@babel/traverse@^7.16.5":
-  version "7.16.5"
-  resolved "https://registry.yarnpkg.com/@babel/traverse/-/traverse-7.16.5.tgz#d7d400a8229c714a59b87624fc67b0f1fbd4b2b3"
-  integrity sha512-FOCODAzqUMROikDYLYxl4nmwiLlu85rNqBML/A5hKRVXG2LV8d0iMqgPzdYTcIpjZEBB7D6UDU9vxRZiriASdQ==
-  dependencies:
-    "@babel/code-frame" "^7.16.0"
-    "@babel/generator" "^7.16.5"
-    "@babel/helper-environment-visitor" "^7.16.5"
-    "@babel/helper-function-name" "^7.16.0"
-    "@babel/helper-hoist-variables" "^7.16.0"
-    "@babel/helper-split-export-declaration" "^7.16.0"
-    "@babel/parser" "^7.16.5"
-    "@babel/types" "^7.16.0"
-    debug "^4.1.0"
-    globals "^11.1.0"
-
-"@babel/traverse@^7.16.5":
   version "7.16.5"
   resolved "https://registry.yarnpkg.com/@babel/traverse/-/traverse-7.16.5.tgz#d7d400a8229c714a59b87624fc67b0f1fbd4b2b3"
   integrity sha512-FOCODAzqUMROikDYLYxl4nmwiLlu85rNqBML/A5hKRVXG2LV8d0iMqgPzdYTcIpjZEBB7D6UDU9vxRZiriASdQ==
