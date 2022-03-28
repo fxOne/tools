@@ -13,6 +13,6 @@
     "release": "changeset publish"
   },
   "dependencies": {
-    "@changesets/cli": "^2.21.1"
+    "@changesets/cli": "^2.22.0"
   }
 }
