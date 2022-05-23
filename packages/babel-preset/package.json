@@ -20,6 +20,6 @@
     "@babel/plugin-proposal-optional-chaining": "^7.16.7",
     "@babel/plugin-transform-async-to-generator": "^7.17.12",
     "@babel/preset-env": "^7.17.10",
-    "@babel/preset-typescript": "^7.16.7"
+    "@babel/preset-typescript": "^7.17.12"
   }
 }
