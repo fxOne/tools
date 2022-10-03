@@ -9,7 +9,7 @@
   "private": false,
   "dependencies": {
     "@babel/cli": "^7.18.10",
-    "@babel/core": "^7.19.1",
+    "@babel/core": "^7.19.3",
     "@babel/node": "^7.18.10",
     "@babel/plugin-proposal-async-generator-functions": "^7.19.1",
     "@babel/plugin-proposal-class-properties": "^7.18.6",
