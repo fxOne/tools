@@ -1,13 +1,13 @@
 {
-  "name": "@fxone/prettier-config",
-  "version": "1.0.1",
-  "description": "prettier config",
-  "main": "index.js",
-  "repository": "https://github.com/fxOne/tools.git",
   "author": "fxOne <fxOne@users.noreply.github.com>",
-  "license": "MIT",
-  "private": false,
   "dependencies": {
-    "prettier": "^2.8.8"
-  }
+    "prettier": "^3.2.5"
+  },
+  "description": "prettier config",
+  "license": "MIT",
+  "main": "index.js",
+  "name": "@fxone/prettier-config",
+  "private": false,
+  "repository": "https://github.com/fxOne/tools.git",
+  "version": "1.1.0"
 }

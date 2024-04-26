@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 1.3.0
+
+- Update to eslint 9
+
 ## 1.2.0
 
 - Remove `@typescript-eslint/indent` as the project is using prettier
