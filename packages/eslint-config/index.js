@@ -2,7 +2,7 @@ import eslint from '@eslint/js';
 import eslintConfigPrettier from "eslint-config-prettier";
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
-import reactRecommended from 'eslint-plugin-react/configs/recommended';
+import reactRecommended from 'eslint-plugin-react/configs/recommended.js';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
 
