@@ -10,10 +10,12 @@ Installation with yarn:
 $ yarn add @fxone/eslint-config -D
 ```
 
-Then create a `.eslintrc` file with the following content:
+Then create a `eslint.config.js` file with the following content:
 
-```json
-{
-  "extends": "@fxone/eslint-config"
-}
+```js
+import config from '@fxone/eslint-config';
+
+export default [
+    ...config
+];
 ```
