@@ -11,18 +11,18 @@ export default tseslint.config(
   ...tseslint.configs.recommendedTypeChecked,
   {
     ...reactRecommended,
+    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    plugins: {
+      'sort-keys-shorthand': sortKeysShorthand,
+      react,
+      reactHooks,
+    },
     languageOptions: {
-      plugins: {
-        sortKeysShorthand,
-        react,
-        reactHooks,
-      },
       parserOptions: {
         ecmaFeatures: {
           jsx: true,
         },
         project: true,
-        tsconfigRootDir: import.meta.dirname,
       },
     },
     rules: {
@@ -36,7 +36,6 @@ export default tseslint.config(
         },
       ],
       indent: 'off',
-      'prettier/prettier': ['error', {}, { usePrettierrc: true }], // Use our .prettierrc file as source
       'react/react-in-jsx-scope': 'off',
       'sort-imports': 0,
       'sort-keys': 0,

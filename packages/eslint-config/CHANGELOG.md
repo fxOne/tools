@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 1.3.2
+
+- Fixing issues with eslint 9
+
 ## 1.3.1
 
 - Fixing issues with eslint 9
