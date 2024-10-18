@@ -1,10 +1,12 @@
 import eslint from '@eslint/js';
+import stylistic from '@stylistic/eslint-plugin';
 import eslintConfigPrettier from "eslint-config-prettier";
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRecommended from 'eslint-plugin-react/configs/recommended.js';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
+
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -53,4 +55,7 @@ export default tseslint.config(
     }
   },
   eslintConfigPrettier,
+  stylistic.configs.customize({
+    semi: true,
+  }),
 );
