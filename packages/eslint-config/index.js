@@ -1,9 +1,8 @@
 import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
 import eslintConfigPrettier from "eslint-config-prettier";
-import react from 'eslint-plugin-react';
+import reactPlugin from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
-import reactRecommended from 'eslint-plugin-react/configs/recommended.js';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
 
@@ -12,12 +11,15 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
-    ...reactRecommended,
+    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    ...reactPlugin.configs.flat.recommended,
+    ...reactPlugin.configs.flat['jsx-runtime'],
+  },
+  {
     files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
     plugins: {
       'sort-keys-shorthand': sortKeysShorthand,
-      react,
-      reactHooks,
+      'react-hooks': reactHooks,
     },
     languageOptions: {
       parserOptions: {
@@ -28,17 +30,27 @@ export default tseslint.config(
       },
     },
     rules: {
-      '@typescript-eslint/ban-ts-comment': 0,
-      '@typescript-eslint/explicit-member-accessibility': 0,
-      '@typescript-eslint/no-non-null-assertion': 0,
+      '@typescript-eslint/ban-ts-comment': ['error', {
+        'ts-check': 'allow-with-description',
+        'ts-expect-error': 'allow-with-description',
+        'ts-ignore': 'allow-with-description',
+        'ts-nocheck': 'allow-with-description',
+      }],
+      '@typescript-eslint/explicit-function-return-type': [
+        'error',
+        {
+          allowExpressions: true,
+          allowHigherOrderFunctions: true,
+          allowTypedFunctionExpressions: true,
+        },
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-use-before-define': [
         'error',
         {
           functions: false,
         },
       ],
-      indent: 'off',
-      'react/react-in-jsx-scope': 'off',
       'sort-imports': 0,
       'sort-keys': 0,
       'sort-keys-shorthand/sort-keys-shorthand': [
@@ -52,6 +64,7 @@ export default tseslint.config(
           shorthand: 'first',
         },
       ],
+      ...reactHooks.configs.recommended.rules,
     }
   },
   eslintConfigPrettier,
