@@ -6,7 +6,6 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
 
-
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -70,5 +69,6 @@ export default tseslint.config(
   eslintConfigPrettier,
   stylistic.configs.customize({
     semi: true,
+    arrowParens: 'always',
   }),
 );
