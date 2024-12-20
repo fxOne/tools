@@ -68,7 +68,8 @@ export default tseslint.config(
   },
   eslintConfigPrettier,
   stylistic.configs.customize({
-    semi: true,
     arrowParens: 'always',
+    braceStyle: '1tbs',
+    semi: true,
   }),
 );

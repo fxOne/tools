@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 1.4.3
+
+- set `braceStyle: '1tbs'`
+
 ## 1.4.2
 
 - set `arrowParens: 'always'`
