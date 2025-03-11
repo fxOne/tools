@@ -6,6 +6,12 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
 
+const stylisticConfig = stylistic.configs.customize({
+  arrowParens: 'always',
+  braceStyle: '1tbs',
+  semi: true,
+});
+
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -67,9 +73,12 @@ export default tseslint.config(
     }
   },
   eslintConfigPrettier,
-  stylistic.configs.customize({
-    arrowParens: 'always',
-    braceStyle: '1tbs',
-    semi: true,
-  }),
+  {
+    ...stylisticConfig,
+    rules: {
+      ...stylisticConfig.rules,
+      '@stylistic/jsx-one-expression-per-line': 0,
+      '@stylistic/multiline-ternary': 0,
+    },
+  },
 );
