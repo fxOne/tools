@@ -8,7 +8,7 @@
   "license": "MIT",
   "private": false,
   "dependencies": {
-    "@babel/cli": "^7.27.0",
+    "@babel/cli": "^7.27.1",
     "@babel/core": "^7.27.1",
     "@babel/node": "^7.27.1",
     "@babel/plugin-proposal-async-generator-functions": "^7.20.7",
