@@ -5,7 +5,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
-## 1.4.
+## 1.5.0
+
+- update dependencies
+
+## 1.4.4
 
 - adjust rules
 
