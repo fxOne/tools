@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 1.5.1
+
+- disable promise rules
+
 ## 1.5.0
 
 - update dependencies

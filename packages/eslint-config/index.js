@@ -49,6 +49,8 @@ export default tseslint.config(
           allowTypedFunctionExpressions: true,
         },
       ],
+      '@typescript-eslint/no-floating-promises': 0,
+      '@typescript-eslint/no-misused-promises': 0,
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/no-use-before-define': [
         'error',
