@@ -1468,10 +1468,10 @@
   resolved "https://registry.yarnpkg.com/@pkgr/core/-/core-0.2.7.tgz#eb5014dfd0b03e7f3ba2eeeff506eed89b028058"
   integrity sha512-YLT9Zo3oNPJoBjBc4q8G2mjU4tqIbf5CEOORbUUr48dCD9q3umJ3IPlVqOqDakPfd2HuwccBaqlGhN4Gmr5OWg==
 
-"@stylistic/eslint-plugin@^5.0.0":
-  version "5.0.0"
-  resolved "https://registry.yarnpkg.com/@stylistic/eslint-plugin/-/eslint-plugin-5.0.0.tgz#587a2d0ca80e3395ad16d8044a62d40119e1b4a7"
-  integrity sha512-nVV2FSzeTJ3oFKw+3t9gQYQcrgbopgCASSY27QOtkhEGgSfdQQjDmzZd41NeT1myQ8Wc6l+pZllST9qIu4NKzg==
+"@stylistic/eslint-plugin@^5.1.0":
+  version "5.1.0"
+  resolved "https://registry.yarnpkg.com/@stylistic/eslint-plugin/-/eslint-plugin-5.1.0.tgz#98769a3e6fc68d92deba20538341b0ea7923b3ce"
+  integrity sha512-TJRJul4u/lmry5N/kyCU+7RWWOk0wyXN+BncRlDYBqpLFnzXkd7QGVfN7KewarFIXv0IX0jSF/Ksu7aHWEDeuw==
   dependencies:
     "@eslint-community/eslint-utils" "^4.7.0"
     "@typescript-eslint/types" "^8.34.1"
@@ -1553,15 +1553,10 @@
     debug "^4.3.4"
     ts-api-utils "^2.1.0"
 
-"@typescript-eslint/types@8.35.0", "@typescript-eslint/types@^8.35.0":
+"@typescript-eslint/types@8.35.0", "@typescript-eslint/types@^8.34.1", "@typescript-eslint/types@^8.35.0":
   version "8.35.0"
   resolved "https://registry.yarnpkg.com/@typescript-eslint/types/-/types-8.35.0.tgz#e60d062907930e30008d796de5c4170f02618a93"
   integrity sha512-0mYH3emanku0vHw2aRLNGqe7EXh9WHEhi7kZzscrMDf6IIRUQ5Jk4wp1QrledE/36KtdZrVfKnE32eZCf/vaVQ==
-
-"@typescript-eslint/types@^8.34.1":
-  version "8.34.1"
-  resolved "https://registry.yarnpkg.com/@typescript-eslint/types/-/types-8.34.1.tgz#565a46a251580dae674dac5aafa8eb14b8322a35"
-  integrity sha512-rjLVbmE7HR18kDsjNIZQHxmv9RZwlgzavryL5Lnj2ujIRTeXlKtILHgRNmQ3j4daw7zd+mQgy+uyt6Zo6I0IGA==
 
 "@typescript-eslint/typescript-estree@8.35.0":
   version "8.35.0"
