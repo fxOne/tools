@@ -6,11 +6,9 @@
   "author": "fxOne <fxOne@users.noreply.github.com>",
   "license": "MIT",
   "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
   "scripts": {
-    "release": "changeset publish"
+    "release": "changeset publish",
+    "preinstall": "npx only-allow pnpm"
   },
   "dependencies": {
     "@changesets/cli": "^2.29.5"
