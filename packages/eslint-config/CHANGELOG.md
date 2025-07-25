@@ -5,6 +5,13 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 2.0.0
+
+- **BREAKING CHANGE**: Move ESLint to peer dependencies
+- Users must now install ESLint manually
+- This prevents ESLint version conflicts between projects
+- Updated installation instructions in README
+
 ## 1.5.1
 
 - disable promise rules

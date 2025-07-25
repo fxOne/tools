@@ -2,7 +2,6 @@
   "author": "fxOne <fxOne@users.noreply.github.com>",
   "dependencies": {
     "@stylistic/eslint-plugin": "^5.2.0",
-    "eslint": "^9.31.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.5.1",
     "eslint-plugin-react": "^7.37.5",
@@ -11,6 +10,14 @@
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.36.0"
   },
+  "peerDependencies": {
+    "eslint": "^9.31.0"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": false
+    }
+  },
   "description": "eslint config",
   "license": "MIT",
   "main": "index.js",
@@ -18,5 +25,5 @@
   "private": false,
   "repository": "https://github.com/fxOne/tools.git",
   "type": "module",
-  "version": "1.5.1"
+  "version": "2.0.0"
 }
