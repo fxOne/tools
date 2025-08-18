@@ -8,7 +8,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-sort-keys-shorthand": "^3.0.0",
     "typescript": "^5.9.2",
-    "typescript-eslint": "^8.39.0"
+    "typescript-eslint": "^8.39.1"
   },
   "peerDependencies": {
     "eslint": "^9.31.0"
