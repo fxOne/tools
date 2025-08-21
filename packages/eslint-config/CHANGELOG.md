@@ -5,6 +5,12 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 2.1.0
+
+-   **New Rules Added**:
+    -   Enforced consistent curly brace usage for all control statements by adding the `curly: "error"` rule.
+    -   Standardized operator placement by including the `@stylistic/operator-linebreak: ["error", "after"]` rule, which requires the operator to appear at the end of the line.
+
 ## 2.0.0
 
 - **BREAKING CHANGE**: Move ESLint to peer dependencies
