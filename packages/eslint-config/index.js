@@ -71,6 +71,7 @@ export default tseslint.config(
           shorthand: 'first',
         },
       ],
+      curly: 'error',
       ...reactHooks.configs.recommended.rules,
     }
   },
@@ -81,6 +82,7 @@ export default tseslint.config(
       ...stylisticConfig.rules,
       '@stylistic/jsx-one-expression-per-line': 0,
       '@stylistic/multiline-ternary': 0,
+      '@stylistic/operator-linebreak': ['error', 'after'],
     },
   },
 );
