@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 2.1.2
+
+- Fix rule
+
 ## 2.1.1
 
 **Bug Fix**: Corrected the order of ESLint configurations to ensure the `curly` rule is properly enforced. The `eslint-config-prettier` preset is now correctly placed at the end of the configuration array to prevent it from overriding other rules.

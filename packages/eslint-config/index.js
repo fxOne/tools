@@ -80,6 +80,14 @@ export default tseslint.config(
     ...stylisticConfig,
     rules: {
       ...stylisticConfig.rules,
+      '@stylistic/indent': [
+        'error',
+        2,
+        {
+          SwitchCase: 1,
+          ignoredNodes: ['TernaryExpression'],
+        },
+      ],
       '@stylistic/jsx-one-expression-per-line': 0,
       '@stylistic/multiline-ternary': 0,
       '@stylistic/operator-linebreak': ['error', 'after'],
