@@ -15,6 +15,7 @@ const stylisticConfig = stylistic.configs.customize({
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
+  eslintConfigPrettier,
   {
     files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
     ...reactPlugin.configs.flat.recommended,
@@ -75,7 +76,6 @@ export default tseslint.config(
       ...reactHooks.configs.recommended.rules,
     }
   },
-  eslintConfigPrettier,
   {
     ...stylisticConfig,
     rules: {
