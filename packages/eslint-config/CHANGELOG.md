@@ -5,6 +5,11 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.0.0
+
+- Adjust rules
+- Update eslint-plugin-react-hooks to v7
+
 ## 2.1.2
 
 - Fix rule

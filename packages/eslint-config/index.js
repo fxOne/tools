@@ -1,7 +1,7 @@
 import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
-import eslintConfigPrettier from "eslint-config-prettier";
-import reactPlugin from 'eslint-plugin-react';
+import eslintConfigPrettier from 'eslint-config-prettier';
+import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
 import tseslint from 'typescript-eslint';
@@ -12,30 +12,28 @@ const stylisticConfig = stylistic.configs.customize({
   semi: true,
 });
 
-export default tseslint.config(
+import { defineConfig } from 'eslint/config';
+
+export default defineConfig(
   eslint.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
+  tseslint.configs.recommendedTypeChecked,
+  tseslint.configs.stylisticTypeChecked,
   eslintConfigPrettier,
+  react.configs.flat.recommended,
+  reactHooks.configs.recommended,
   {
-    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
-    ...reactPlugin.configs.flat.recommended,
-    ...reactPlugin.configs.flat['jsx-runtime'],
-  },
-  {
-    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
+    files: ['**/*.{ts,tsx}'],
     plugins: {
       'sort-keys-shorthand': sortKeysShorthand,
-      'react-hooks': reactHooks,
     },
     languageOptions: {
-      parserOptions: {
-        ecmaFeatures: {
-          jsx: true,
-        },
-        project: true,
-      },
+      ecmaVersion: 2024,
+      sourceType: 'module',
     },
     rules: {
+      "react/react-in-jsx-scope": "off",
+      '@stylistic/indent-binary-ops': 0,
+      'no-console': ['error', { allow: ['warn', 'error'] }],
       '@typescript-eslint/ban-ts-comment': ['error', {
         'ts-check': 'allow-with-description',
         'ts-expect-error': 'allow-with-description',
@@ -73,7 +71,6 @@ export default tseslint.config(
         },
       ],
       curly: 'error',
-      ...reactHooks.configs.recommended.rules,
     }
   },
   {
