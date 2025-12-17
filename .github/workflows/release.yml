@@ -1,22 +1,29 @@
 name: Release
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write # 🔑 Wichtig für Trusted Publishing
 
 jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@master
+        uses: actions/checkout@v4
         with:
-          # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
           fetch-depth: 0
 
-      - name: Setup Node.js 22.x
-        uses: actions/setup-node@master
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 22.x
+          node-version: 22
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
@@ -24,15 +31,13 @@ jobs:
           version: 8
 
       - name: Install Dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
 
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
-        uses: changesets/action@master
+      - name: Create Release Pull Request or Publish
+        uses: changesets/action@v1
         with:
           publish: pnpm release
           commit: 'chore(release): update monorepo packages versions'
           title: 'Upcoming Release Changes'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
