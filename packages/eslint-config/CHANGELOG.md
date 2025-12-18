@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.0.1
+
+- Fixing usage of flat react hooks rule
+
 ## 3.0.0
 
 - Adjust rules

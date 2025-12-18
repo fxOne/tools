@@ -20,7 +20,7 @@ export default defineConfig(
   tseslint.configs.stylisticTypeChecked,
   eslintConfigPrettier,
   react.configs.flat.recommended,
-  reactHooks.configs.recommended,
+  reactHooks.configs.flat.recommended,
   {
     files: ['**/*.{ts,tsx}'],
     plugins: {
