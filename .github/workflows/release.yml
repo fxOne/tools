@@ -41,3 +41,10 @@ jobs:
           title: 'Upcoming Release Changes'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Dump npm debug logs
+        if: failure()
+        run: |
+          echo "=== npm debug logs ==="
+          ls -la ~/.npm/_logs || true
+          cat ~/.npm/_logs/* || true
