@@ -23,6 +23,9 @@
   "main": "index.js",
   "name": "@fxone/eslint-config",
   "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": "https://github.com/fxOne/tools.git",
   "type": "module",
   "version": "3.0.0"

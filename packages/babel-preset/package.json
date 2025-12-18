@@ -7,6 +7,9 @@
   "author": "fxOne <fxOne@users.noreply.github.com>",
   "license": "MIT",
   "private": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@babel/cli": "^7.28.3",
     "@babel/core": "^7.28.5",
