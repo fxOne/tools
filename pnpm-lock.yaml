@@ -15,8 +15,8 @@ importers:
   packages/babel-preset:
     dependencies:
       '@babel/cli':
-        specifier: ^7.28.3
-        version: 7.28.3(@babel/core@7.28.5)
+        specifier: ^7.28.6
+        version: 7.28.6(@babel/core@7.28.5)
       '@babel/core':
         specifier: ^7.28.5
         version: 7.28.5
@@ -96,8 +96,8 @@ packages:
     resolution: {integrity: sha512-1Yjs2SvM8TflER/OD3cOjhWWOZb58A2t7wpE2S9XfBYTiIl+XFhQG2bjy4Pu1I+EAlCNUzRDYDdFwFYUKvXcIA==}
     engines: {node: '>=0.10.0'}
 
-  '@babel/cli@7.28.3':
-    resolution: {integrity: sha512-n1RU5vuCX0CsaqaXm9I0KUCNKNQMy5epmzl/xdSSm70bSqhg9GWhgeosypyQLc0bK24+Xpk1WGzZlI9pJtkZdg==}
+  '@babel/cli@7.28.6':
+    resolution: {integrity: sha512-6EUNcuBbNkj08Oj4gAZ+BUU8yLCgKzgVX4gaTh09Ya2C8ICM4P+G30g4m3akRxSYAp3A/gnWchrNst7px4/nUQ==}
     engines: {node: '>=6.9.0'}
     hasBin: true
     peerDependencies:
@@ -874,9 +874,6 @@ packages:
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
-
-  '@jridgewell/trace-mapping@0.3.30':
-    resolution: {integrity: sha512-GQ7Nw5G2lTu/BtHTKfXhKHok2WGetd4XYcVKGx00SjAk8GMwgJM3zr6zORiPGuOE+/vkc90KtTosSSvaCjKb2Q==}
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
@@ -2302,10 +2299,10 @@ snapshots:
 
   '@aashutoshrathi/word-wrap@1.2.6': {}
 
-  '@babel/cli@7.28.3(@babel/core@7.28.5)':
+  '@babel/cli@7.28.6(@babel/core@7.28.5)':
     dependencies:
       '@babel/core': 7.28.5
-      '@jridgewell/trace-mapping': 0.3.30
+      '@jridgewell/trace-mapping': 0.3.31
       commander: 6.2.1
       convert-source-map: 2.0.0
       fs-readdir-recursive: 1.1.0
@@ -3355,11 +3352,6 @@ snapshots:
   '@jridgewell/resolve-uri@3.1.2': {}
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
-
-  '@jridgewell/trace-mapping@0.3.30':
-    dependencies:
-      '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
 
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
