@@ -5,6 +5,14 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 4.0.0
+
+- **BREAKING CHANGE**: Update ESLint peer dependency to v10 (`^10.0.0`)
+- Update `@stylistic/eslint-plugin` to `^5.10.0`
+- Update `eslint-plugin-prettier` to `^5.5.5`
+- Update `eslint-plugin-sort-keys-shorthand` to `^5.0.0`
+- Update `typescript-eslint` to `^8.57.0`
+
 ## 3.0.1
 
 - Fixing usage of flat react hooks rule
