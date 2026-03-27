@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 4.1.0
+
+- remove typescript as a dependency
+
 ## 4.0.0
 
 - **BREAKING CHANGE**: Update ESLint peer dependency to v10 (`^10.0.0`)
