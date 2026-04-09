@@ -5,6 +5,10 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 4.1.1
+
+- update dependencies
+
 ## 4.1.0
 
 - remove typescript as a dependency
