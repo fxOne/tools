@@ -28,15 +28,16 @@ directory, so it always analyses your code with the compiler your code uses.
 ## Usage
 
 ```bash
-$ pnpm prop-flow <file> [propName] [--tsconfig <path>] [--json]
+$ pnpm prop-flow <file> [propName] [--tsconfig <path>] [--all-props] [--json]
 ```
 
-| argument     | meaning                                                                                                             |
-| ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| `<file>`     | a `.ts`/`.tsx` file containing the component(s) to inspect                                                          |
-| `[propName]` | one prop; omitted → every optional prop of every component exported from the file                                   |
-| `--tsconfig` | override the auto-discovered tsconfig — use the broadest "solution" config so call sites in other packages are seen |
-| `--json`     | machine-readable output                                                                                             |
+| argument       | meaning                                                                                                             |
+| -------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `<file>`       | a `.ts`/`.tsx` file containing the component(s) to inspect                                                          |
+| `[propName]`   | one prop; omitted → every optional prop of every component exported from the file                                   |
+| `--tsconfig`   | override the auto-discovered tsconfig — use the broadest "solution" config so call sites in other packages are seen |
+| `--all-props`  | inspect required props too — reported only where they carry a constant value                                        |
+| `--json`       | machine-readable output                                                                                             |
 
 ```
 $ pnpm prop-flow src/Button.tsx title
@@ -61,9 +62,49 @@ justified         Button.title
 | `caller-dead`          | no call site passes it → optional and always `undefined`                 |
 | `unused-component`     | the component itself has no call sites in the Program                    |
 | `manual`               | an unreadable spread or a contested override blocks a static conclusion  |
+| `required`             | the prop has no `?` to judge — listed only for its constant value        |
 
 Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
 failure (message on stderr).
+
+## Constant values
+
+A prop that is passed the same value at every call site carries no information:
+the value can be inlined and the prop dropped. That question is **orthogonal**
+to the `?` — a prop can be `justified` (some call sites omit it) and still be
+constant everywhere it is passed, which is the most interesting combination of
+all. So it is reported as its own field rather than as a verdict:
+
+```
+justified         Chip.variant
+   passes=2  omits=1  ambiguous=0
+   constant="danger"  coverage=passes
+     real        src/App.tsx:4:7 (string literal)
+     real        src/App.tsx:5:7 (string literal)
+     omit        src/App.tsx:6:7
+   → genuinely sometimes-absent. The `?` is correct.
+   → every passing call site sends "danger"; the value could be inlined.
+```
+
+Values are read off the **type**, not off the syntax, so `size="sm"`,
+`size={'sm'}`, a `const SIZE = 'sm'`, an enum member and a property of an
+`as const` object all resolve to the same value — and anything the checker
+cannot pin to a single literal (a call, a parameter, a widened `let`) leaves
+the claim unmade. `<C dense />` counts as `true`.
+
+Two coverages: `passes` means every call site that passes the prop agrees; `all`
+means nothing anywhere sees another value — either there are no omissions, or
+the component's own binding default is that same value, so the omissions land
+on it too. `all` is the case where the prop can go away entirely.
+
+Nothing is reported below two passing sites — with one, "always the same value"
+is trivially true. And constant does not mean wrong: `variant="danger"` on the
+two delete buttons is constant and correct, which is why the hint stops at
+"could be inlined".
+
+`--all-props` widens *discovery* to required props, not the report: a required
+prop shows up only when it actually carries a constant value, under the
+`required` verdict. Without the flag the output is exactly as it was.
 
 ## API
 
@@ -76,15 +117,35 @@ const report = analyseProps({ file: 'src/Button.tsx', prop: 'title' });
 process.stdout.write(formatText(report));
 ```
 
-`analyseProps` accepts `{ cwd, file, prop, ts, tsconfig }` and returns a
-`Report`; passing `ts` injects a specific compiler instead of resolving one
+`analyseProps` accepts `{ allProps, cwd, file, prop, ts, tsconfig }` and returns
+a `Report`; passing `ts` injects a specific compiler instead of resolving one
 from `cwd`.
 
 ## Limitations
 
 Pass-throughs are followed through plain identifiers and `props.x` member
 access, including inside render callbacks — a `props.x` in `items.map(…)` is
-still traced to the surrounding component.
+still traced to the surrounding component. When a level of the chain binds its
+own default, an omission at *its* call sites is counted as a pass of that
+default rather than as an omission at the leaf: `Relay({ size = 'lg' })`
+forwarding `size` feeds `'lg'` down, not `undefined`. Those absorbed omissions
+are listed individually, at the call site where the default fires:
+
+```
+NEEDLESS ?        Hop.size
+   passes=2  omits=0  ambiguous=0
+   constant="lg"  coverage=all
+     passthrough src/Relay.tsx:9:10 → Relay.size (omissions fall back to its default)
+     real        src/App.tsx:14:7 → Relay.size (the default fires here)
+     real        src/App.tsx:15:7 → Relay.size (the default fires here)
+```
+
+Otherwise the counts are of *leaves*, not of lines: one pass-through site can
+stand for a whole subtree of passes and omissions below it.
+
+A constancy claim needs every call site to be readable. One `manual` site sinks
+it — an unreadable spread could be carrying any value at all — as does a single
+value the checker cannot pin to a literal.
 
 A spread is only ambiguous when it can actually reach the prop. `{...x}` whose
 type provably lacks the prop is skipped; `{...props}` and `{...rest}` are

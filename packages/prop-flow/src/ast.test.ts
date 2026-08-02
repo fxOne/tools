@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   bindingKey,
   bindingNameOfFn,
-  defaultedBindingNames,
+  defaultedBindings,
   findAttr,
   isComponentFn,
   isExported,
@@ -92,21 +92,29 @@ describe('unwrapToFn', () => {
   });
 });
 
-describe('defaultedBindingNames', () => {
+describe('defaultedBindings', () => {
+  /** The props keys collected, in declaration order. */
+  function keysOf(code: string): string[] {
+    return [...defaultedBindings(ts, firstParameter(code)).keys()];
+  }
+
   it('collects the props keys whose binding carries a default', () => {
-    expect([...defaultedBindingNames(ts, firstParameter('function C({ a = 1, b, c: d = 2, e: f }: P) {}'))]).toEqual([
-      'a',
-      'c',
-    ]);
+    expect(keysOf('function C({ a = 1, b, c: d = 2, e: f }: P) {}')).toEqual(['a', 'c']);
+  });
+
+  it('maps each key to the default expression, not just to the fact of one', () => {
+    const defaults = defaultedBindings(ts, firstParameter('function C({ size = "md" }: P) {}'));
+
+    expect(defaults.get('size')?.getText()).toBe('"md"');
   });
 
   it('has nothing to collect for a whole-object parameter', () => {
-    expect([...defaultedBindingNames(ts, firstParameter('function C(props: P) {}'))]).toEqual([]);
+    expect(keysOf('function C(props: P) {}')).toEqual([]);
   });
 
   it('skips a defaulted binding whose props key cannot be read', () => {
     // A computed key over a nested pattern: neither half names a props key.
-    expect([...defaultedBindingNames(ts, firstParameter('function C({ [k]: { x } = {} }: P) {}'))]).toEqual([]);
+    expect(keysOf('function C({ [k]: { x } = {} }: P) {}')).toEqual([]);
   });
 });
 

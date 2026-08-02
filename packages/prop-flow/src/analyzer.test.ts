@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createAnalyzer, verdictOf } from './analyzer.js';
 import type { Analyzer } from './analyzer.js';
 import { readTsConfig } from './tsconfig.js';
-import type { PropAnalysis, Site, Verdict } from './types.js';
+import type { ConstantValue, PropAnalysis, Site, Verdict } from './types.js';
 
 const FIXTURE_DIR = resolve(import.meta.dirname, '../fixtures/basic');
 
@@ -237,9 +237,9 @@ describe('createAnalyzer', () => {
     // out anywhere, and `id` becomes optional only through the mapping.
     const mapped = analyzer.findComponents(sourceFile('sources.tsx')).find(({ name }) => name === 'Mapped');
 
-    expect(mapped && analyzer.listOptionalProps(mapped)).toEqual([
-      { hasDefault: false, name: 'id' },
-      { hasDefault: false, name: 'note' },
+    expect(mapped && analyzer.listProps(mapped)).toEqual([
+      { hasDefault: false, name: 'id', optional: true },
+      { hasDefault: false, name: 'note', optional: true },
     ]);
   });
 
@@ -263,12 +263,22 @@ describe('createAnalyzer', () => {
     expect(analyzer.findComponents(sourceFile('app.tsx'))).toEqual([]);
 
     const [button] = analyzer.findComponents(sourceFile('button.tsx'));
-    expect(button && analyzer.listOptionalProps(button)).toEqual([
-      { hasDefault: false, name: 'disabled' },
-      { hasDefault: false, name: 'icon' },
-      { hasDefault: true, name: 'size' },
-      { hasDefault: false, name: 'title' },
+    expect(button && analyzer.listProps(button)).toEqual([
+      { hasDefault: false, name: 'disabled', optional: true },
+      { hasDefault: false, name: 'icon', optional: true },
+      { hasDefault: true, name: 'size', optional: true },
+      { hasDefault: false, name: 'title', optional: true },
     ]);
+  });
+
+  it('adds the props declared without a `?` only when asked to', () => {
+    const [button] = analyzer.findComponents(sourceFile('button.tsx'));
+
+    expect(button && analyzer.listProps(button, { includeRequired: true })[0]).toEqual({
+      hasDefault: false,
+      name: 'label',
+      optional: false,
+    });
   });
 
   it('skips optional props that are inherited from a dependency', () => {
@@ -276,7 +286,69 @@ describe('createAnalyzer', () => {
     // `lang` are not the author's to drop, and they drown the ones that are.
     const [vendored] = analyzer.findComponents(sourceFile('vendored.tsx'));
 
-    expect(vendored && analyzer.listOptionalProps(vendored)).toEqual([{ hasDefault: false, name: 'caption' }]);
+    expect(vendored && analyzer.listProps(vendored)).toEqual([{ hasDefault: false, name: 'caption', optional: true }]);
+  });
+});
+
+describe('constant values', () => {
+  it.each<[string, string, ConstantValue | null]>([
+    // Two passes agree, one call site omits it: the `?` is justified and the
+    // value is still redundant.
+    ['Chip', 'variant', { coverage: 'passes', value: '"danger"' }],
+    // Same shape, but the binding default equals the value, so the omissions
+    // land on it too — nothing anywhere sees anything else.
+    ['Tile', 'size', { coverage: 'all', value: '"md"' }],
+    ['Flag', 'dense', { coverage: 'all', value: 'true' }],
+    // Written out, through a `const` alias and off an `as const` object: the
+    // checker normalises all three to the one enum member.
+    ['Tag', 'tone', { coverage: 'all', value: 'Tone.Danger' }],
+    ['Blur', 'label', null],
+    ['Solo', 'hint', null],
+    ['Hop', 'size', { coverage: 'all', value: '"lg"' }],
+    ['Dim', 'size', null],
+    // A default the omissions land on, but not on what the passes send — so
+    // the claim stops at the passes. `Drift` splits the same way for the other
+    // reason: its default is a call, which cannot be shown to agree with
+    // anything.
+    ['Keep', 'weight', { coverage: 'passes', value: '"light"' }],
+    ['Drift', 'label', { coverage: 'passes', value: '"fixed"' }],
+    // Read off the type rather than the syntax: a number, and a boolean, which
+    // is a union of two literal types and so not an `isLiteral()` literal.
+    ['Gauge', 'span', { coverage: 'all', value: '42' }],
+    ['Toggle', 'on', { coverage: 'all', value: 'true' }],
+  ])('constant.tsx: %s.%s → %j', (component, prop, constant) => {
+    expect(analyse('constant.tsx', component, prop).constant).toEqual(constant);
+  });
+
+  it('leaves a claim unmade where a single site cannot be read', () => {
+    // Every MANUAL site could be feeding any value at all, so one of them is
+    // enough to sink the claim even where every readable site agrees.
+    expect(analyse('spread.tsx', 'Murky', 'note').constant).toBeNull();
+  });
+
+  it('absorbs an intermediate default instead of counting it as an omission', () => {
+    // <Relay/> is rendered twice without `size`, but Relay defaults it to 'lg'
+    // and forwards that on — so what reaches Hop is 'lg', not `undefined`.
+    const result = analyse('constant.tsx', 'Hop', 'size');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 0, real: 2, verdict: 'unnecessary-optional' });
+    // The two absorbed omissions get a line each, at the <Relay/> that omits
+    // them — `passes=2` under a single pass-through line would read as a
+    // miscount, and those locations are where the default actually fires.
+    expect(result.sites.map(({ kind, note }) => `${kind} ${note ?? ''}`.trim())).toEqual([
+      'passthrough omissions fall back to its default',
+      'real the default fires here',
+      'real the default fires here',
+    ]);
+    expect(result.sites.every(({ via }) => via === 'Relay.size')).toBe(true);
+  });
+
+  it('absorbs a default it cannot read without inventing a value for it', () => {
+    // Vague defaults `size` to a call. The omissions are still passes — the
+    // counts move — but what they pass is unknown, so no constant survives.
+    const result = analyse('constant.tsx', 'Dim', 'size');
+
+    expect(result).toMatchObject({ ambiguous: 0, constant: null, omit: 0, real: 2 });
   });
 });
 

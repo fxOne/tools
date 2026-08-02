@@ -1,6 +1,7 @@
 import { PropFlowError } from './errors.js';
 
 export interface CliArgs {
+  readonly allProps: boolean;
   readonly help: boolean;
   readonly json: boolean;
   readonly tsconfig: string | null;
@@ -10,6 +11,7 @@ export interface CliArgs {
 
 export function parseArgs(argv: readonly string[]): CliArgs {
   const positional: string[] = [];
+  let allProps = false;
   let help = false;
   let json = false;
   let tsconfig: string | null = null;
@@ -19,7 +21,9 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     if (arg === undefined) {
       continue;
     }
-    if (arg === '--json') {
+    if (arg === '--all-props') {
+      allProps = true;
+    } else if (arg === '--json') {
       json = true;
     } else if (arg === '-h' || arg === '--help') {
       help = true;
@@ -41,5 +45,5 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     throw new PropFlowError(`Unexpected argument: ${positional[2] ?? ''}`);
   }
 
-  return { help, json, tsconfig, file: positional[0] ?? null, prop: positional[1] ?? null };
+  return { allProps, help, json, tsconfig, file: positional[0] ?? null, prop: positional[1] ?? null };
 }
