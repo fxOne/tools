@@ -5,6 +5,16 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 2.1.0
+
+- The `typescript` peer dependency is now marked optional. prop-flow never
+  loads its own copy — it resolves the target project's compiler from the
+  working directory — so installing the peer only wasted disk. Under `pnpm dlx`
+  it also put the resolved TypeScript version into the cache key, which
+  invalidated the cached prop-flow on every TypeScript release. A project
+  without `typescript` now reaches the documented `PropFlowError` instead of
+  silently getting a second compiler installed beside it
+
 ## 2.0.0
 
 - **BREAKING CHANGE**: `OptionalProp` is now `DeclaredProp`, with an added

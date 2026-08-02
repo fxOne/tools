@@ -21,15 +21,29 @@ afternoon. This does the climb in one pass.
 $ pnpm add @fxone/prop-flow -D
 ```
 
-TypeScript is a peer dependency — prop-flow deliberately ships none of its own
-and loads the **target project's** compiler, resolved from the current working
-directory, so it always analyses your code with the compiler your code uses.
+Or without installing anything:
+
+```bash
+$ pnpm dlx @fxone/prop-flow <file>
+```
+
+TypeScript is an **optional** peer dependency — prop-flow deliberately ships
+none of its own and loads the **target project's** compiler, resolved from the
+current working directory, so it always analyses your code with the compiler
+your code uses. Without a resolvable `typescript` it exits with a handled
+error; it will not fall back to a compiler of its own.
 
 ## Usage
 
 ```bash
 $ pnpm prop-flow <file> [propName] [--tsconfig <path>] [--all-props] [--json]
 ```
+
+Run it **from the project root**. Both the compiler lookup and every relative
+`<file>` resolve against the working directory of the process — and `pnpm -C
+<dir>` does not set that, it only moves pnpm's own resolution. Invoked from
+elsewhere you get a `File not found` naming a path under the wrong root, which
+reads like a typo in the argument and is not one.
 
 | argument       | meaning                                                                                                             |
 | -------------- | ------------------------------------------------------------------------------------------------------------------- |
