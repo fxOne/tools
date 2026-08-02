@@ -1,6 +1,6 @@
 export interface BadgeProps {
   text: string;
-  /** manual: reached through a spread and through an explicit undefined */
+  /** justified: passed directly, through a resolved spread, and left undefined once */
   tone?: string;
 }
 

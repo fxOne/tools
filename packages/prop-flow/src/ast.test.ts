@@ -1,6 +1,6 @@
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { bindingNameOfFn, defaultedBindingNames, enclosingComponentFn, isExported, unwrapToFn } from './ast.js';
+import { bindingNameOfFn, defaultedBindingNames, findAttr, isExported, unwrapToFn } from './ast.js';
 import type { ComponentFn } from './ast.js';
 
 function parse(code: string): ts.SourceFile {
@@ -82,17 +82,26 @@ describe('defaultedBindingNames', () => {
   });
 });
 
-describe('enclosingComponentFn', () => {
-  it('walks up to the nearest function that takes a parameter', () => {
-    const identifier = findNode('function C(p: P) { return marker; }', (node): node is ts.Identifier => {
-      return ts.isIdentifier(node) && node.text === 'marker';
-    });
+describe('findAttr', () => {
+  /** What the lookup found for `title`, compacted: the value and the spreads. */
+  function lookup(code: string): { spreads: number; value: string | null } {
+    const { attr, spreadsAfter } = findAttr(ts, findNode(code, ts.isJsxSelfClosingElement), 'title');
+    const init = attr?.initializer;
+    return { spreads: spreadsAfter.length, value: init && ts.isStringLiteral(init) ? init.text : null };
+  }
 
-    expect(enclosingComponentFn(ts, identifier)?.kind).toBe(ts.SyntaxKind.FunctionDeclaration);
-  });
-
-  it('returns null at the top level', () => {
-    expect(enclosingComponentFn(ts, firstStatement('const a = 1;'))).toBeNull();
+  it.each([
+    ['const a = <C title="x" />;', { spreads: 0, value: 'x' }],
+    ['const a = <C other="x" />;', { spreads: 0, value: null }],
+    ['const a = <C {...p} />;', { spreads: 1, value: null }],
+    ['const a = <C title="x" {...p} />;', { spreads: 1, value: 'x' }],
+    ['const a = <C {...p} {...q} />;', { spreads: 2, value: null }],
+    // A spread BEFORE the attribute cannot win under JSX last-wins — dropped.
+    ['const a = <C {...p} title="x" />;', { spreads: 0, value: 'x' }],
+    // Duplicates resolve to the last one, exactly as JSX itself does.
+    ['const a = <C title="x" title="y" />;', { spreads: 0, value: 'y' }],
+  ])('%s', (code, expected) => {
+    expect(lookup(code)).toEqual(expected);
   });
 });
 

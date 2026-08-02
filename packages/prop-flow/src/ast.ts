@@ -4,8 +4,13 @@ import type { TypeScriptApi } from './typescript-api.js';
 /** Every function shape that can back a component. */
 export type ComponentFn = TS.ArrowFunction | TS.FunctionDeclaration | TS.FunctionExpression;
 
-/** What `findAttr` found: the attribute, `null` (absent), or an unresolvable spread. */
-export type AttrLookup = TS.JsxAttribute | 'spread' | null;
+/** What `findAttr` found on a JSX element for one prop name. */
+export interface AttrLookup {
+  /** The winning attribute of that name, or `null` when none is written out. */
+  readonly attr: TS.JsxAttribute | null;
+  /** Spreads written AFTER `attr` — the only ones that can still override it. */
+  readonly spreadsAfter: readonly TS.JsxSpreadAttribute[];
+}
 
 export function isExported(ts: TypeScriptApi, node: TS.Node): boolean {
   if (!ts.canHaveModifiers(node)) {
@@ -57,32 +62,22 @@ export function bindingKey(ts: TypeScriptApi, element: TS.BindingElement): strin
 }
 
 /**
- * On a JSX element, find the attribute named `propName`: the JsxAttribute, or
- * `null` when absent, or `'spread'` when a `{...x}` could be supplying it.
+ * On a JSX element, find what feeds `propName`. JSX resolves attributes
+ * last-wins, so anything before the winning attribute — including spreads —
+ * cannot influence the value and is dropped here.
  */
 export function findAttr(ts: TypeScriptApi, el: TS.JsxOpeningLikeElement, propName: string): AttrLookup {
-  let sawSpread = false;
-  for (const attr of el.attributes.properties) {
-    if (ts.isJsxAttribute(attr) && ts.isIdentifier(attr.name) && attr.name.text === propName) {
-      return attr;
-    }
-    if (ts.isJsxSpreadAttribute(attr)) {
-      sawSpread = true;
+  let attr: TS.JsxAttribute | null = null;
+  let spreadsAfter: TS.JsxSpreadAttribute[] = [];
+  for (const property of el.attributes.properties) {
+    if (ts.isJsxSpreadAttribute(property)) {
+      spreadsAfter.push(property);
+    } else if (ts.isJsxAttribute(property) && ts.isIdentifier(property.name) && property.name.text === propName) {
+      attr = property;
+      spreadsAfter = [];
     }
   }
-  return sawSpread ? 'spread' : null;
-}
-
-/** Nearest enclosing function that takes a parameter — i.e. could be a component. */
-export function enclosingComponentFn(ts: TypeScriptApi, node: TS.Node): ComponentFn | null {
-  let current: TS.Node | undefined = node.parent;
-  while (current) {
-    if (isComponentFn(ts, current) && current.parameters.length > 0) {
-      return current;
-    }
-    current = current.parent;
-  }
-  return null;
+  return { attr, spreadsAfter };
 }
 
 /**

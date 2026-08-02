@@ -60,7 +60,7 @@ justified         Button.title
 | `unnecessary-optional` | every call site passes it → could be required                            |
 | `caller-dead`          | no call site passes it → optional and always `undefined`                 |
 | `unused-component`     | the component itself has no call sites in the Program                    |
-| `manual`               | a spread / rename / dynamic value on the path blocks a static conclusion |
+| `manual`               | an unreadable spread or a contested override blocks a static conclusion |
 
 Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
 failure (message on stderr).
@@ -83,12 +83,33 @@ from `cwd`.
 ## Limitations
 
 Pass-throughs are followed through plain identifiers and `props.x` member
-access. A spread (`{...rest}`) and a rest element in the props destructure are
-reported as `manual` rather than guessed at. `prop={undefined}` counts as an
-omission — it is an omission dressed up as a pass, so a prop that is only ever
-fed `undefined` still comes out as `caller-dead`. A conditional expression that
-can evaluate to `undefined` counts as a real source — the one false positive the
-tool accepts on purpose.
+access, including inside render callbacks — a `props.x` in `items.map(…)` is
+still traced to the surrounding component.
+
+A spread is only ambiguous when it can actually reach the prop. `{...x}` whose
+type provably lacks the prop is skipped; `{...props}` and `{...rest}` are
+followed one level up, and a spread of an object literal (or of a `const` bound
+to one) is read key by key. What stays `manual`: a spread whose type cannot
+answer the question (`any`, `Record<string, unknown>`, a union that carries the
+prop in only some constituents), and an *optional* prop in a spread that
+contests an earlier value — both outcomes are possible at runtime, so neither is
+concluded. JSX ordering is respected throughout: in `<C title="x" {...props} />`
+the spread wins.
+
+Optional props a component only *inherits* from a dependency — the ~250 DOM and
+ARIA props behind `React.ComponentProps<'button'>`, say — are not reported. A
+verdict on them is true but useless: the `?` is not yours to drop, and they bury
+the props that are. A prop redeclared in your own type is still reported.
+
+A pass-through that climbs into a function which is *called* rather than
+rendered — a `renderX({ … })` test helper, typically — also stays `manual`: its
+callers exist but are invisible to a JSX walk, and counting them as zero would
+report a live prop as `caller-dead`.
+
+`prop={undefined}` counts as an omission — it is an omission dressed up as a
+pass, so a prop that is only ever fed `undefined` still comes out as
+`caller-dead`. A conditional expression that can evaluate to `undefined` counts
+as a real source — the one false positive the tool accepts on purpose.
 
 Components are picked up from `export function C`, `export const C = …`
 (including `memo()` / `forwardRef()` wrappers), `export default function C` and
