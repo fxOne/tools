@@ -1,9 +1,10 @@
 export { createAnalyzer, verdictOf } from './analyzer.js';
-export type { Analyzer, AnalyzerOptions, Component } from './analyzer.js';
+export type { Analyzer, AnalyzerOptions } from './analyzer.js';
 export { parseArgs } from './args.js';
 export type { CliArgs } from './args.js';
 export { runCli, USAGE } from './cli.js';
 export type { CliContext, OutputStream } from './cli.js';
+export type { Component } from './component.js';
 export { PropFlowError } from './errors.js';
 export { analyseProps } from './prop-flow.js';
 export type { AnalyseOptions } from './prop-flow.js';

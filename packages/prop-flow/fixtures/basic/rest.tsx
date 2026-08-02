@@ -5,7 +5,8 @@ export interface RestProps {
   extra?: string;
 }
 
-// Rest element in the props destructure: what `rest` holds is not decidable.
+// The rest object is passed as a VALUE, not spread: it always exists, so
+// Sink.data counts as a real pass at this site.
 export function Rest({ ...rest }: RestProps) {
   return <Sink data={rest} />;
 }

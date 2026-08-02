@@ -2,6 +2,9 @@
 .yarnrc
 
 node_modules
+# a checked-in stand-in for a dependency, so prop-flow can be tested against
+# props it must treat as vendored
+!packages/prop-flow/fixtures/basic/node_modules
 
 # build
 /lib/

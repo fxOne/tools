@@ -39,9 +39,23 @@ function describeSite(site: Site): string {
   return `${site.kind} ${site.via ?? site.note ?? ''}`.trim();
 }
 
+/**
+ * How often each site description occurs. Several distinct code shapes collapse
+ * to the same verdict on purpose, so the multiset — not a sorted list — is what
+ * says which of them were seen.
+ */
+function tally(sites: readonly Site[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const site of sites) {
+    const key = describeSite(site);
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
+}
+
 describe('createAnalyzer', () => {
   it.each<[string, string, string, Verdict]>([
-    ['badge.tsx', 'Badge', 'tone', 'manual'],
+    ['badge.tsx', 'Badge', 'tone', 'justified'],
     ['button.tsx', 'Button', 'disabled', 'justified'],
     ['button.tsx', 'Button', 'icon', 'caller-dead'],
     ['button.tsx', 'Button', 'size', 'unnecessary-optional'],
@@ -57,7 +71,9 @@ describe('createAnalyzer', () => {
     ['panel.tsx', 'Panel', 'note', 'justified'],
     ['renamed.tsx', 'Renamed', 'caption', 'unnecessary-optional'],
     ['rest.tsx', 'Rest', 'extra', 'caller-dead'],
-    ['sink.tsx', 'Sink', 'data', 'manual'],
+    ['sink.tsx', 'Sink', 'data', 'unnecessary-optional'],
+    ['spread.tsx', 'Leaf', 'note', 'justified'],
+    ['spread.tsx', 'Murky', 'note', 'manual'],
     ['tree.tsx', 'Tree', 'depth', 'unnecessary-optional'],
   ])('%s: %s.%s → %s', (file, component, prop, verdict) => {
     expect(analyse(file, component, prop).verdict).toBe(verdict);
@@ -99,18 +115,132 @@ describe('createAnalyzer', () => {
     expect(ghost.sites.map(describeSite)).toEqual(['omit explicit undefined', 'omit explicit undefined']);
   });
 
-  it('flags spreads and rest elements for a human', () => {
+  it('resolves every spread shape it can see through', () => {
+    const result = analyse('spread.tsx', 'Leaf', 'note');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 3, real: 5 });
+    expect(result.sites.map(describeSite).sort()).toEqual([
+      'omit',
+      'passthrough Forward.note',
+      'passthrough ForwardRest.note',
+      'passthrough List.note',
+      'passthrough ListConst.note',
+      'passthrough Multi.note',
+      'passthrough Override.note',
+      // Never rendered and never called — the site below it is dead code.
+      'passthrough Unrendered.note',
+      'real string literal',
+    ]);
+  });
+
+  it('keeps the three spread shapes it must not resolve MANUAL', () => {
+    // An unreadable spread type, a contested optional override, and a climb
+    // into a plain helper whose callers this analysis cannot see.
+    const result = analyse('spread.tsx', 'Murky', 'note');
+
+    expect(result).toMatchObject({ ambiguous: 3, omit: 0, real: 0 });
+    expect(result.sites.map(describeSite).sort()).toEqual([
+      'manual an optional prop in a spread contests an earlier value',
+      'manual renderMurky.note: called, never rendered as JSX',
+      'manual spread of a type that cannot be read',
+    ]);
+  });
+
+  it('reads a prop through a render callback instead of stopping at it', () => {
+    // `items.map((item) => <Leaf note={props.note}/>)` — the nearest enclosing
+    // function is the callback, so a lexical match would call this a local.
+    const { sites } = analyse('spread.tsx', 'Leaf', 'note');
+
+    expect(sites.filter(({ via }) => via === 'List.note')).toHaveLength(1);
+    expect(sites.filter(({ via }) => via === 'ListConst.note')).toHaveLength(1);
+  });
+
+  it('resolves a spread of a typed const through its object literal', () => {
+    // <Badge {...badgeProps}/> in app.tsx, where badgeProps sets `tone`.
     const badge = analyse('badge.tsx', 'Badge', 'tone');
-    expect(badge).toMatchObject({ ambiguous: 1, omit: 1, real: 2 });
+
+    expect(badge).toMatchObject({ ambiguous: 0, omit: 1, real: 3 });
     expect(badge.sites.map(describeSite).sort()).toEqual([
       'omit explicit undefined',
       'real local value',
       'real string literal',
-      'spread',
+      'real string literal',
     ]);
 
+    // The rest object is passed as a VALUE — it always exists, so it is real.
     const sink = analyse('sink.tsx', 'Sink', 'data');
-    expect(sink.sites.map(describeSite)).toEqual(['manual rest element in props destructure']);
+    expect(sink.sites.map(describeSite)).toEqual(['real local value']);
+  });
+
+  it('resolves a spread of an object literal down to the key it sets', () => {
+    // sources.tsx feeds <Literal/> one object-literal shape per call site.
+    const result = analyse('sources.tsx', 'Literal', 'note');
+
+    expect(tally(result.sites)).toEqual({
+      // A nested spread and a computed key can both still be setting `note`.
+      'manual a nested spread or computed key in the spread object': 2,
+      // A getter is a value the classifier cannot follow to its source.
+      'manual unrecognised object literal member': 1,
+      'omit not set in the spread object': 1,
+      // The shorthand `{ id, note }`, where `note` is a module-level const.
+      'real local value': 1,
+      // Written inline at the call site, and behind a quoted key.
+      'real string literal': 2,
+    });
+  });
+
+  it('refuses to resolve a spread whose value it cannot pin down', () => {
+    const result = analyse('sources.tsx', 'Blocked', 'note');
+
+    expect(tally(result.sites)).toEqual({
+      'manual spread of CallExpression cannot be resolved': 1,
+      // A reassignable `let`, a const holding a call's result, a destructured
+      // local, a second parameter, a class method's parameter and an anonymous
+      // function's — six ways to name an object the classifier cannot read.
+      'manual spread of Identifier cannot be resolved': 6,
+      // `any`, and a union carrying `note` in only some of its constituents.
+      'manual spread of a type that cannot be read': 2,
+      // A union no constituent of which has `note`: provably nothing to carry.
+      'omit': 1,
+    });
+    expect(result.verdict).toBe('manual');
+  });
+
+  it('classifies attribute values that resolve to nothing', () => {
+    const result = analyse('sources.tsx', 'Direct', 'note');
+
+    expect(tally(result.sites)).toEqual({
+      // `note={/* nothing */}` — an expression container with no expression.
+      'manual unrecognised attribute form': 1,
+      // An identifier resolving to no declaration, and one destructured in a
+      // class method — neither names a prop of an enclosing component.
+      'real local value': 2,
+      // `config.note`, where `config` is a destructured prop, not the props.
+      'real member value': 1,
+    });
+  });
+
+  it('skips exports and tags that name no component', () => {
+    // A missing name, a type, a plain const and a destructured declaration all
+    // sit in sources.tsx and must be walked past rather than reported.
+    expect(analyzer.findComponents(sourceFile('sources.tsx')).map(({ name }) => name)).toEqual([
+      'Literal',
+      'Blocked',
+      'Direct',
+      'Member',
+      'Mapped',
+    ]);
+  });
+
+  it('lists optional props a mapped type synthesised', () => {
+    // `{ [K in keyof P]?: P[K] }` — the props are the checker's, not written
+    // out anywhere, and `id` becomes optional only through the mapping.
+    const mapped = analyzer.findComponents(sourceFile('sources.tsx')).find(({ name }) => name === 'Mapped');
+
+    expect(mapped && analyzer.listOptionalProps(mapped)).toEqual([
+      { hasDefault: false, name: 'id' },
+      { hasDefault: false, name: 'note' },
+    ]);
   });
 
   it('terminates on a self-recursive component instead of looping', () => {
@@ -139,6 +269,14 @@ describe('createAnalyzer', () => {
       { hasDefault: true, name: 'size' },
       { hasDefault: false, name: 'title' },
     ]);
+  });
+
+  it('skips optional props that are inherited from a dependency', () => {
+    // VendoredProps extends an interface from node_modules: `hidden` and
+    // `lang` are not the author's to drop, and they drown the ones that are.
+    const [vendored] = analyzer.findComponents(sourceFile('vendored.tsx'));
+
+    expect(vendored && analyzer.listOptionalProps(vendored)).toEqual([{ hasDefault: false, name: 'caption' }]);
   });
 });
 

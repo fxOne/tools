@@ -1,30 +1,25 @@
 import type * as TS from 'typescript';
-import {
-  bindingKey,
-  bindingNameOfFn,
-  defaultedBindingNames,
-  enclosingComponentFn,
-  findAttr,
-  isExported,
-  unwrapToFn,
-} from './ast.js';
-import type { ComponentFn } from './ast.js';
+import { defaultedBindingNames, isExported, unwrapToFn } from './ast.js';
+import { createClassifier } from './classify.js';
+import { createComponentFactory } from './component.js';
+import type { Component } from './component.js';
 import { locOf } from './paths.js';
 import type { OptionalProp, PropAnalysis, Site, Verdict } from './types.js';
 import type { TypeScriptApi } from './typescript-api.js';
-
-export interface Component {
-  readonly fn: ComponentFn;
-  readonly name: string;
-  readonly paramNode: TS.ParameterDeclaration;
-  readonly symbol: TS.Symbol;
-}
 
 export interface AnalyzerOptions {
   /** Paths in the output are printed relative to this directory. */
   readonly cwd: string;
   readonly program: TS.Program;
   readonly ts: TypeScriptApi;
+}
+
+/** What one JSX call site adds to the analysis of a prop. */
+interface Contribution {
+  readonly ambiguous: number;
+  readonly omit: number;
+  readonly real: number;
+  readonly site: Site;
 }
 
 export interface Analyzer {
@@ -35,36 +30,10 @@ export interface Analyzer {
   listOptionalProps(component: Component): OptionalProp[];
 }
 
-/** The value is the enclosing component's own prop — climb one level up. */
-interface Passthrough {
-  readonly component: Component;
-  readonly kind: 'passthrough';
-  readonly prop: string;
-}
-
-/** Static analysis cannot decide this one; a human has to look. */
-interface Manual {
-  readonly kind: 'manual';
-  readonly note: string;
-}
-
-/** The attribute is written out but carries nothing: `prop={undefined}`. */
-interface Omission {
-  readonly kind: 'omit';
-  readonly note: string;
-}
-
-/** A value originates right here. */
-interface Real {
-  readonly kind: 'real';
-  readonly note: string;
-}
-
-/** Where a JSX attribute's value comes from. */
-type Classification = Manual | Omission | Passthrough | Real;
-
 export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer {
   const checker = program.getTypeChecker();
+  const components = createComponentFactory({ checker, ts });
+  const classifier = createClassifier({ checker, components, ts });
 
   // Symbol identity. Symbols are not primitives, so a Map keyed by symbol
   // works — but the index is keyed by a plain id to keep it printable.
@@ -72,8 +41,9 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
   let nextSymbolId = 1;
 
   // Every JSX usage in the Program, indexed once: component symbol → call
-  // sites. Building this eagerly costs one walk and saves one per prop.
-  const usageIndex = buildUsageIndex();
+  // sites, plus the symbols that are CALLED rather than rendered. Building
+  // this eagerly costs one walk and saves one per prop.
+  const { calledIds, usageIndex } = indexProgram();
 
   return { analyse, findComponents, listOptionalProps };
 
@@ -95,165 +65,90 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     let ambiguous = 0;
 
     for (const el of usages) {
-      const attr = findAttr(ts, el, propName);
-      if (attr === 'spread') {
-        ambiguous += 1;
-        sites.push({ kind: 'spread', loc: locOf(el, cwd) });
-        continue;
-      }
-      if (attr === null) {
-        omit += 1;
-        sites.push({ kind: 'omit', loc: locOf(el, cwd) });
-        continue;
-      }
-
-      const classified = classifyAttrValue(attr);
-      if (classified.kind === 'passthrough') {
-        // The value is the enclosing component's own prop — climb.
-        const sub = analyse(classified.component, classified.prop, visited);
-        real += sub.real;
-        omit += sub.omit;
-        ambiguous += sub.ambiguous;
-        sites.push({
-          kind: 'passthrough',
-          loc: locOf(el, cwd),
-          via: `${classified.component.name}.${classified.prop}`,
-        });
-      } else if (classified.kind === 'real') {
-        real += 1;
-        sites.push({ kind: 'real', loc: locOf(el, cwd), note: classified.note });
-      } else if (classified.kind === 'omit') {
-        omit += 1;
-        sites.push({ kind: 'omit', loc: locOf(el, cwd), note: classified.note });
-      } else {
-        ambiguous += 1;
-        sites.push({ kind: 'manual', loc: locOf(el, cwd), note: classified.note });
-      }
+      const contribution = contributionOf(el, propName, visited);
+      real += contribution.real;
+      omit += contribution.omit;
+      ambiguous += contribution.ambiguous;
+      sites.push(contribution.site);
     }
 
     return { ambiguous, omit, real, sites, verdict: verdictOf(usages.length, real, omit, ambiguous) };
   }
 
-  function classifyAttrValue(attr: TS.JsxAttribute): Classification {
-    const init = attr.initializer;
-    // Shorthand boolean: <C flag /> → always a concrete `true`.
-    if (init === undefined) {
-      return { kind: 'real', note: 'boolean shorthand' };
+  /** Classify one call site, expanding a pass-through into what it bottoms out in. */
+  function contributionOf(el: TS.JsxOpeningLikeElement, propName: string, visited: Set<string>): Contribution {
+    const classified = classifier.classifyElement(el, propName);
+    if (classified.kind === 'real') {
+      return { ambiguous: 0, omit: 0, real: 1, site: { kind: 'real', loc: locOf(el, cwd), note: classified.note } };
     }
-    if (ts.isStringLiteral(init)) {
-      return { kind: 'real', note: 'string literal' };
+    if (classified.kind === 'omit') {
+      return { ambiguous: 0, omit: 1, real: 0, site: { kind: 'omit', loc: locOf(el, cwd), note: classified.note } };
     }
-    if (!ts.isJsxExpression(init) || init.expression === undefined) {
-      return { kind: 'manual', note: 'unrecognised attribute form' };
-    }
-    const expr = init.expression;
-
-    // `prop={undefined}` is an omission dressed up as a pass.
-    if (ts.isIdentifier(expr) && expr.text === 'undefined') {
-      return { kind: 'omit', note: 'explicit undefined' };
+    if (classified.kind === 'manual') {
+      return { ambiguous: 1, omit: 0, real: 0, site: { kind: 'manual', loc: locOf(el, cwd), note: classified.note } };
     }
 
-    // Identifier — the enclosing component's own prop (climb) or a local
-    // value (a real source).
-    if (ts.isIdentifier(expr)) {
-      return asEnclosingProp(expr, expr.text) ?? { kind: 'real', note: 'local value' };
+    // The value is the enclosing component's own prop — climb.
+    const sub = analyse(classified.component, classified.prop, visited);
+    if (sub.verdict === 'unused-component' && calledIds.has(symbolId(classified.component.symbol))) {
+      // The climb landed on a plain function taking an options object — a test
+      // helper, say. It has callers, they just are not JSX, so the walk cannot
+      // see them. Counting the empty subtree would turn an invisible pass into
+      // a caller-dead: "delete the prop" on live code.
+      return {
+        ambiguous: 1,
+        omit: 0,
+        real: 0,
+        site: {
+          kind: 'manual',
+          loc: locOf(el, cwd),
+          note: `${classified.component.name}.${classified.prop}: called, never rendered as JSX`,
+        },
+      };
     }
-    // `props.foo` — climb when `props` is the enclosing props parameter.
-    if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression)) {
-      return asEnclosingProp(expr, expr.name.text, expr.expression.text) ?? { kind: 'real', note: 'member value' };
-    }
-    // Any other expression (call, object, conditional, JSX, template…) — the
-    // value is produced right here. Treat as a real source; a conditional that
-    // can yield undefined is the one false positive we accept (conservative:
-    // counts as "present").
-    return { kind: 'real', note: ts.SyntaxKind[expr.kind] };
-  }
-
-  /**
-   * If `name` (optionally accessed as `objName.name`) refers to a prop of the
-   * component that lexically encloses `node`, describe the pass-through.
-   * Returns null when it is a local — i.e. a real source.
-   */
-  function asEnclosingProp(node: TS.Node, name: string, objName?: string): Classification | null {
-    const fn = enclosingComponentFn(ts, node);
-    const param = fn?.parameters[0];
-    if (!fn || !param) {
-      return null;
-    }
-    const component = componentOfFn(fn);
-    if (!component) {
-      return null;
-    }
-
-    // Destructured props: function C({ foo, bar: baz }: Props)
-    if (ts.isObjectBindingPattern(param.name)) {
-      if (objName) {
-        // `props.x` while props are destructured → not the parameter. Local.
-        return null;
-      }
-      for (const element of param.name.elements) {
-        if (!ts.isIdentifier(element.name) || element.name.text !== name) {
-          continue;
-        }
-        if (element.dotDotDotToken) {
-          return { kind: 'manual', note: 'rest element in props destructure' };
-        }
-        return { component, kind: 'passthrough', prop: bindingKey(ts, element) ?? name };
-      }
-      return null;
-    }
-
-    // Whole-object parameter: function C(props: Props) … used as props.x
-    if (ts.isIdentifier(param.name) && objName === param.name.text) {
-      return { component, kind: 'passthrough', prop: name };
-    }
-    return null;
+    return {
+      ambiguous: sub.ambiguous,
+      omit: sub.omit,
+      real: sub.real,
+      site: {
+        kind: 'passthrough',
+        loc: locOf(el, cwd),
+        via: `${classified.component.name}.${classified.prop}`,
+      },
+    };
   }
 
   // ── component + prop discovery ────────────────────────────────────────────
 
   function findComponents(sourceFile: TS.SourceFile): Component[] {
-    const out: Component[] = [];
-    for (const stmt of sourceFile.statements) {
-      if (ts.isFunctionDeclaration(stmt) && stmt.name && isExported(ts, stmt)) {
-        push(out, componentFrom(stmt, stmt.name));
-      } else if (ts.isVariableStatement(stmt) && isExported(ts, stmt)) {
-        for (const decl of stmt.declarationList.declarations) {
-          if (!ts.isIdentifier(decl.name) || !decl.initializer) {
-            continue;
-          }
-          const fn = unwrapToFn(ts, decl.initializer);
-          if (fn) {
-            push(out, componentFrom(fn, decl.name));
-          }
-        }
-      } else if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier && stmt.exportClause) {
-        // Declared first, exported later: `export { Card, Inner as Public }`.
-        if (ts.isNamedExports(stmt.exportClause)) {
-          for (const element of stmt.exportClause.elements) {
-            push(out, componentFromExport(element));
-          }
-        }
-      }
-    }
-    return out;
+    return sourceFile.statements.flatMap((stmt) => componentsOfStatement(stmt));
   }
 
-  /** Resolve an `export { X }` specifier back to the function it names. */
-  function componentFromExport(element: TS.ExportSpecifier): Component | null {
-    const exported = checker.getSymbolAtLocation(element.propertyName ?? element.name);
-    const declaration = exported && resolveAlias(exported).declarations?.[0];
-    if (!declaration) {
+  /** The components one top-level statement declares or exports. */
+  function componentsOfStatement(stmt: TS.Statement): Component[] {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && isExported(ts, stmt)) {
+      return compact([components.fromNode(stmt, stmt.name)]);
+    }
+    if (ts.isVariableStatement(stmt) && isExported(ts, stmt)) {
+      return compact(stmt.declarationList.declarations.map((decl) => componentOfDeclaration(decl)));
+    }
+    if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier) {
+      const clause = stmt.exportClause;
+      // Declared first, exported later: `export { Card, Inner as Public }`.
+      if (clause && ts.isNamedExports(clause)) {
+        return compact(clause.elements.map((element) => components.fromExport(element)));
+      }
+    }
+    return [];
+  }
+
+  /** The component `export const C = memo(() => …)` binds, if it binds one. */
+  function componentOfDeclaration(decl: TS.VariableDeclaration): Component | null {
+    if (!ts.isIdentifier(decl.name) || !decl.initializer) {
       return null;
     }
-    if (ts.isFunctionDeclaration(declaration) && declaration.name) {
-      return componentFrom(declaration, declaration.name);
-    }
-    if (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name) && declaration.initializer) {
-      const fn = unwrapToFn(ts, declaration.initializer);
-      return fn ? componentFrom(fn, declaration.name) : null;
-    }
-    return null;
+    const fn = unwrapToFn(ts, decl.initializer);
+    return fn ? components.fromNode(fn, decl.name) : null;
   }
 
   function listOptionalProps(component: Component): OptionalProp[] {
@@ -261,64 +156,63 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     const defaults = defaultedBindingNames(ts, component.paramNode);
     const out: OptionalProp[] = [];
     for (const sym of type.getProperties()) {
-      if ((sym.getFlags() & ts.SymbolFlags.Optional) !== 0) {
+      if ((sym.getFlags() & ts.SymbolFlags.Optional) !== 0 && !isVendored(sym)) {
         out.push({ hasDefault: defaults.has(sym.getName()), name: sym.getName() });
       }
     }
     return out;
   }
 
-  function componentFrom(fn: ComponentFn, nameNode: TS.Identifier): Component | null {
-    const paramNode = fn.parameters[0];
-    const symbol = checker.getSymbolAtLocation(nameNode);
-    if (!paramNode || !symbol) {
-      return null;
-    }
-    return { fn, name: nameNode.text, paramNode, symbol: resolveAlias(symbol) };
-  }
-
-  /** Rebuild a component descriptor from the function alone. */
-  function componentOfFn(fn: ComponentFn): Component | null {
-    const nameNode = bindingNameOfFn(ts, fn);
-    return nameNode ? componentFrom(fn, nameNode) : null;
+  /**
+   * Whether the prop is declared only in a dependency. A component spreading
+   * `React.ComponentProps<'button'>` inherits some 250 optional DOM and ARIA
+   * props; a verdict on those is true but useless — the `?` is not the
+   * author's to drop, and it drowns the props that are.
+   */
+  function isVendored(sym: TS.Symbol): boolean {
+    const declarations = sym.getDeclarations() ?? [];
+    return (
+      declarations.length > 0 &&
+      declarations.every((declaration) => program.isSourceFileFromExternalLibrary(declaration.getSourceFile()))
+    );
   }
 
   // ── JSX usage index ───────────────────────────────────────────────────────
 
-  function buildUsageIndex(): Map<number, TS.JsxOpeningLikeElement[]> {
-    const index = new Map<number, TS.JsxOpeningLikeElement[]>();
-    for (const sourceFile of program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/')) {
-        continue;
-      }
-      const visit = (node: TS.Node): void => {
-        if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-          const sym = jsxTagSymbol(node.tagName);
-          if (sym) {
-            const id = symbolId(sym);
-            const list = index.get(id);
-            if (list) {
-              list.push(node);
-            } else {
-              index.set(id, [node]);
-            }
-          }
+  function indexProgram(): { calledIds: Set<number>; usageIndex: Map<number, TS.JsxOpeningLikeElement[]> } {
+    const calledIds = new Set<number>();
+    const usageIndex = new Map<number, TS.JsxOpeningLikeElement[]>();
+    const visit = (node: TS.Node): void => {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const sym = jsxTagSymbol(node.tagName);
+        if (sym) {
+          const id = symbolId(sym);
+          const list = usageIndex.get(id) ?? [];
+          list.push(node);
+          usageIndex.set(id, list);
         }
-        ts.forEachChild(node, visit);
-      };
-      visit(sourceFile);
+      } else if (ts.isCallExpression(node)) {
+        const sym = checker.getSymbolAtLocation(node.expression);
+        if (sym) {
+          calledIds.add(symbolId(components.resolveAlias(sym)));
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    for (const sourceFile of program.getSourceFiles()) {
+      // Declarations and dependencies hold no call site this analysis owns.
+      if (!sourceFile.isDeclarationFile && !sourceFile.fileName.includes('/node_modules/')) {
+        visit(sourceFile);
+      }
     }
-    return index;
+    return { calledIds, usageIndex };
   }
 
   function jsxTagSymbol(tagName: TS.JsxTagNameExpression): TS.Symbol | null {
     // Intrinsics (<div/>) have no symbol; <Ns.Foo/> resolves on the property.
     const sym = checker.getSymbolAtLocation(tagName);
-    return sym ? resolveAlias(sym) : null;
-  }
-
-  function resolveAlias(sym: TS.Symbol): TS.Symbol {
-    return (sym.getFlags() & ts.SymbolFlags.Alias) !== 0 ? checker.getAliasedSymbol(sym) : sym;
+    return sym ? components.resolveAlias(sym) : null;
   }
 
   function symbolId(sym: TS.Symbol): number {
@@ -351,8 +245,6 @@ export function verdictOf(usageCount: number, real: number, omit: number, ambigu
   return 'manual';
 }
 
-function push<T>(out: T[], value: T | null): void {
-  if (value) {
-    out.push(value);
-  }
+function compact<T>(values: readonly (T | null)[]): T[] {
+  return values.filter((value) => value !== null);
 }

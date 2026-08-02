@@ -61,7 +61,7 @@ export function hint(row: PropReport): string {
     case 'justified':
       return '   → genuinely sometimes-absent. The `?` is correct.\n';
     case 'manual':
-      return '   → a spread / rename / dynamic value blocks a static verdict. Check the MANUAL sites by hand.\n';
+      return '   → an unreadable spread or a contested override blocks a static verdict. Check the MANUAL sites by hand.\n';
     case 'unused-component':
       return '   → the component has no call sites in this Program. Verify the tsconfig spans its callers.\n';
     default:

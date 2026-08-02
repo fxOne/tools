@@ -5,14 +5,15 @@
  *   unnecessary-optional every call site passes it → could be required
  *   caller-dead          NO call site passes it → optional + always undefined
  *   unused-component     the component itself has no call sites in the Program
- *   manual               a spread / rename / render-prop on the path blocks a
- *                        static conclusion → listed for a human to check
+ *   manual               an unreadable spread, a dynamic value or a contested
+ *                        override blocks a static conclusion → listed for a
+ *                        human to check
  *   cycle                the pass-through graph looped back on itself; the
  *                        repeat visit contributes no new information
  */
 export type Verdict = 'caller-dead' | 'cycle' | 'justified' | 'manual' | 'unnecessary-optional' | 'unused-component';
 
-export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real' | 'spread';
+export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real';
 
 /** One JSX call site, classified. */
 export interface Site {
