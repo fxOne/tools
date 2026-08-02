@@ -37,20 +37,13 @@ export function unwrapToFn(ts: TypeScriptApi, expr: TS.Expression): ComponentFn 
 
 /** Names in `function C({ foo = 1 }: P)` that carry a default initializer. */
 export function defaultedBindingNames(ts: TypeScriptApi, paramNode: TS.ParameterDeclaration): Set<string> {
-  const names = new Set<string>();
   if (!ts.isObjectBindingPattern(paramNode.name)) {
-    return names;
+    return new Set();
   }
-  for (const element of paramNode.name.elements) {
-    if (!element.initializer) {
-      continue;
-    }
-    const key = bindingKey(ts, element);
-    if (key) {
-      names.add(key);
-    }
-  }
-  return names;
+  const keys = paramNode.name.elements
+    .filter((element) => element.initializer !== undefined)
+    .map((element) => bindingKey(ts, element));
+  return new Set(keys.filter((key) => key !== null));
 }
 
 /** The props key a binding element reads: `{ label: text }` → `label`. */
@@ -88,16 +81,14 @@ export function bindingNameOfFn(ts: TypeScriptApi, fn: ComponentFn): TS.Identifi
   if (ts.isFunctionDeclaration(fn) && fn.name) {
     return fn.name;
   }
+  // Wrapper calls are the only thing worth climbing past; whatever sits above
+  // them either binds the function to a name or ends the search.
   let current: TS.Node | undefined = fn.parent;
-  while (current) {
-    if (ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
-      return current.name;
-    }
-    if (ts.isCallExpression(current)) {
-      current = current.parent;
-      continue;
-    }
-    return null;
+  while (current && ts.isCallExpression(current)) {
+    current = current.parent;
+  }
+  if (current && ts.isVariableDeclaration(current) && ts.isIdentifier(current.name)) {
+    return current.name;
   }
   return null;
 }

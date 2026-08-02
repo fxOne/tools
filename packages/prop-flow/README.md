@@ -60,7 +60,7 @@ justified         Button.title
 | `unnecessary-optional` | every call site passes it → could be required                            |
 | `caller-dead`          | no call site passes it → optional and always `undefined`                 |
 | `unused-component`     | the component itself has no call sites in the Program                    |
-| `manual`               | an unreadable spread or a contested override blocks a static conclusion |
+| `manual`               | an unreadable spread or a contested override blocks a static conclusion  |
 
 Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
 failure (message on stderr).

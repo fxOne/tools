@@ -11,7 +11,8 @@ export default defineConfig({
       ],
       include: ['src/**/*.ts'],
       provider: 'v8',
-      reporter: ['text', 'lcov'],
+      // json-summary is what per-file coverage tooling reads off disk.
+      reporter: ['text', 'lcov', 'json-summary'],
     },
     environment: 'node',
     include: ['src/**/*.test.ts'],

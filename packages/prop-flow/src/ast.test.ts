@@ -1,10 +1,18 @@
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
-import { bindingNameOfFn, defaultedBindingNames, findAttr, isExported, unwrapToFn } from './ast.js';
+import {
+  bindingKey,
+  bindingNameOfFn,
+  defaultedBindingNames,
+  findAttr,
+  isComponentFn,
+  isExported,
+  unwrapToFn,
+} from './ast.js';
 import type { ComponentFn } from './ast.js';
 
-function parse(code: string): ts.SourceFile {
-  return ts.createSourceFile('fixture.tsx', code, ts.ScriptTarget.ES2023, true, ts.ScriptKind.TSX);
+function parse(code: string, setParentNodes = true): ts.SourceFile {
+  return ts.createSourceFile('fixture.tsx', code, ts.ScriptTarget.ES2023, setParentNodes, ts.ScriptKind.TSX);
 }
 
 function firstStatement(code: string): ts.Statement {
@@ -16,7 +24,11 @@ function firstStatement(code: string): ts.Statement {
 }
 
 /** First node in `code` matching `predicate`, depth-first. */
-function findNode<T extends ts.Node>(code: string, predicate: (node: ts.Node) => node is T): T {
+function findNode<T extends ts.Node>(
+  code: string,
+  predicate: (node: ts.Node) => node is T,
+  setParentNodes = true,
+): T {
   let found: T | undefined;
   const visit = (node: ts.Node): void => {
     if (!found && predicate(node)) {
@@ -24,7 +36,7 @@ function findNode<T extends ts.Node>(code: string, predicate: (node: ts.Node) =>
     }
     ts.forEachChild(node, visit);
   };
-  visit(parse(code));
+  visit(parse(code, setParentNodes));
   if (!found) {
     throw new Error(`no matching node in: ${code}`);
   }
@@ -56,6 +68,17 @@ describe('isExported', () => {
   });
 });
 
+describe('isComponentFn', () => {
+  it('accepts the three function shapes a component can take, and nothing else', () => {
+    expect(isComponentFn(ts, firstStatement('function C(p: P) {}'))).toBe(true);
+    expect(isComponentFn(ts, initializerOf('const C = (p: P) => null;'))).toBe(true);
+    expect(isComponentFn(ts, initializerOf('const C = function (p: P) {};'))).toBe(true);
+    // A class method takes a props argument too, but it is none of the three.
+    expect(isComponentFn(ts, findNode('class C { render(p: P) {} }', ts.isMethodDeclaration))).toBe(false);
+    expect(isComponentFn(ts, firstStatement('const C = 1;'))).toBe(false);
+  });
+});
+
 describe('unwrapToFn', () => {
   it.each([
     ['const C = () => null;', ts.SyntaxKind.ArrowFunction],
@@ -79,6 +102,23 @@ describe('defaultedBindingNames', () => {
 
   it('has nothing to collect for a whole-object parameter', () => {
     expect([...defaultedBindingNames(ts, firstParameter('function C(props: P) {}'))]).toEqual([]);
+  });
+
+  it('skips a defaulted binding whose props key cannot be read', () => {
+    // A computed key over a nested pattern: neither half names a props key.
+    expect([...defaultedBindingNames(ts, firstParameter('function C({ [k]: { x } = {} }: P) {}'))]).toEqual([]);
+  });
+});
+
+describe('bindingKey', () => {
+  it.each<[string, string | null]>([
+    ['function C({ label }: P) {}', 'label'],
+    // The props key is what the binding reads FROM, not what it binds to.
+    ['function C({ label: text }: P) {}', 'label'],
+    // Neither half is an identifier: a computed key over a nested pattern.
+    ['function C({ [key]: { inner } }: P) {}', null],
+  ])('%s → %s', (code, expected) => {
+    expect(bindingKey(ts, findNode(code, ts.isBindingElement))).toBe(expected);
   });
 });
 
@@ -120,6 +160,13 @@ describe('bindingNameOfFn', () => {
 
   it('returns null for a function that is never bound to a name', () => {
     const fn = findNode('render((p: P) => null);', ts.isArrowFunction);
+
+    expect(bindingNameOfFn(ts, fn)).toBeNull();
+  });
+
+  it('returns null when the tree carries no parent pointers to walk up', () => {
+    // The walk climbs `parent`; parsed without them there is nowhere to go.
+    const fn = findNode('const C = (p: P) => null;', ts.isArrowFunction, false);
 
     expect(bindingNameOfFn(ts, fn)).toBeNull();
   });

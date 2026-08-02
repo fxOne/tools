@@ -14,6 +14,14 @@ export interface AnalyzerOptions {
   readonly ts: TypeScriptApi;
 }
 
+/** What one JSX call site adds to the analysis of a prop. */
+interface Contribution {
+  readonly ambiguous: number;
+  readonly omit: number;
+  readonly real: number;
+  readonly site: Site;
+}
+
 export interface Analyzer {
   /** Walk every call site of `component` and classify how `propName` is fed. */
   analyse(component: Component, propName: string): PropAnalysis;
@@ -57,70 +65,90 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     let ambiguous = 0;
 
     for (const el of usages) {
-      const classified = classifier.classifyElement(el, propName);
-      if (classified.kind === 'passthrough') {
-        // The value is the enclosing component's own prop — climb.
-        const sub = analyse(classified.component, classified.prop, visited);
-        if (sub.verdict === 'unused-component' && calledIds.has(symbolId(classified.component.symbol))) {
-          // The climb landed on a plain function taking an options object —
-          // a test helper, say. It has callers, they just are not JSX, so the
-          // walk cannot see them. Counting the empty subtree would turn an
-          // invisible pass into a caller-dead: "delete the prop" on live code.
-          ambiguous += 1;
-          const via = `${classified.component.name}.${classified.prop}`;
-          sites.push({ kind: 'manual', loc: locOf(el, cwd), note: `${via}: called, never rendered as JSX` });
-          continue;
-        }
-        real += sub.real;
-        omit += sub.omit;
-        ambiguous += sub.ambiguous;
-        sites.push({
-          kind: 'passthrough',
-          loc: locOf(el, cwd),
-          via: `${classified.component.name}.${classified.prop}`,
-        });
-      } else if (classified.kind === 'real') {
-        real += 1;
-        sites.push({ kind: 'real', loc: locOf(el, cwd), note: classified.note });
-      } else if (classified.kind === 'omit') {
-        omit += 1;
-        sites.push({ kind: 'omit', loc: locOf(el, cwd), note: classified.note });
-      } else {
-        ambiguous += 1;
-        sites.push({ kind: 'manual', loc: locOf(el, cwd), note: classified.note });
-      }
+      const contribution = contributionOf(el, propName, visited);
+      real += contribution.real;
+      omit += contribution.omit;
+      ambiguous += contribution.ambiguous;
+      sites.push(contribution.site);
     }
 
     return { ambiguous, omit, real, sites, verdict: verdictOf(usages.length, real, omit, ambiguous) };
   }
 
+  /** Classify one call site, expanding a pass-through into what it bottoms out in. */
+  function contributionOf(el: TS.JsxOpeningLikeElement, propName: string, visited: Set<string>): Contribution {
+    const classified = classifier.classifyElement(el, propName);
+    if (classified.kind === 'real') {
+      return { ambiguous: 0, omit: 0, real: 1, site: { kind: 'real', loc: locOf(el, cwd), note: classified.note } };
+    }
+    if (classified.kind === 'omit') {
+      return { ambiguous: 0, omit: 1, real: 0, site: { kind: 'omit', loc: locOf(el, cwd), note: classified.note } };
+    }
+    if (classified.kind === 'manual') {
+      return { ambiguous: 1, omit: 0, real: 0, site: { kind: 'manual', loc: locOf(el, cwd), note: classified.note } };
+    }
+
+    // The value is the enclosing component's own prop — climb.
+    const sub = analyse(classified.component, classified.prop, visited);
+    if (sub.verdict === 'unused-component' && calledIds.has(symbolId(classified.component.symbol))) {
+      // The climb landed on a plain function taking an options object — a test
+      // helper, say. It has callers, they just are not JSX, so the walk cannot
+      // see them. Counting the empty subtree would turn an invisible pass into
+      // a caller-dead: "delete the prop" on live code.
+      return {
+        ambiguous: 1,
+        omit: 0,
+        real: 0,
+        site: {
+          kind: 'manual',
+          loc: locOf(el, cwd),
+          note: `${classified.component.name}.${classified.prop}: called, never rendered as JSX`,
+        },
+      };
+    }
+    return {
+      ambiguous: sub.ambiguous,
+      omit: sub.omit,
+      real: sub.real,
+      site: {
+        kind: 'passthrough',
+        loc: locOf(el, cwd),
+        via: `${classified.component.name}.${classified.prop}`,
+      },
+    };
+  }
+
   // ── component + prop discovery ────────────────────────────────────────────
 
   function findComponents(sourceFile: TS.SourceFile): Component[] {
-    const out: Component[] = [];
-    for (const stmt of sourceFile.statements) {
-      if (ts.isFunctionDeclaration(stmt) && stmt.name && isExported(ts, stmt)) {
-        push(out, components.fromNode(stmt, stmt.name));
-      } else if (ts.isVariableStatement(stmt) && isExported(ts, stmt)) {
-        for (const decl of stmt.declarationList.declarations) {
-          if (!ts.isIdentifier(decl.name) || !decl.initializer) {
-            continue;
-          }
-          const fn = unwrapToFn(ts, decl.initializer);
-          if (fn) {
-            push(out, components.fromNode(fn, decl.name));
-          }
-        }
-      } else if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier && stmt.exportClause) {
-        // Declared first, exported later: `export { Card, Inner as Public }`.
-        if (ts.isNamedExports(stmt.exportClause)) {
-          for (const element of stmt.exportClause.elements) {
-            push(out, components.fromExport(element));
-          }
-        }
+    return sourceFile.statements.flatMap((stmt) => componentsOfStatement(stmt));
+  }
+
+  /** The components one top-level statement declares or exports. */
+  function componentsOfStatement(stmt: TS.Statement): Component[] {
+    if (ts.isFunctionDeclaration(stmt) && stmt.name && isExported(ts, stmt)) {
+      return compact([components.fromNode(stmt, stmt.name)]);
+    }
+    if (ts.isVariableStatement(stmt) && isExported(ts, stmt)) {
+      return compact(stmt.declarationList.declarations.map((decl) => componentOfDeclaration(decl)));
+    }
+    if (ts.isExportDeclaration(stmt) && !stmt.moduleSpecifier) {
+      const clause = stmt.exportClause;
+      // Declared first, exported later: `export { Card, Inner as Public }`.
+      if (clause && ts.isNamedExports(clause)) {
+        return compact(clause.elements.map((element) => components.fromExport(element)));
       }
     }
-    return out;
+    return [];
+  }
+
+  /** The component `export const C = memo(() => …)` binds, if it binds one. */
+  function componentOfDeclaration(decl: TS.VariableDeclaration): Component | null {
+    if (!ts.isIdentifier(decl.name) || !decl.initializer) {
+      return null;
+    }
+    const fn = unwrapToFn(ts, decl.initializer);
+    return fn ? components.fromNode(fn, decl.name) : null;
   }
 
   function listOptionalProps(component: Component): OptionalProp[] {
@@ -154,31 +182,29 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
   function indexProgram(): { calledIds: Set<number>; usageIndex: Map<number, TS.JsxOpeningLikeElement[]> } {
     const calledIds = new Set<number>();
     const usageIndex = new Map<number, TS.JsxOpeningLikeElement[]>();
-    for (const sourceFile of program.getSourceFiles()) {
-      if (sourceFile.isDeclarationFile || sourceFile.fileName.includes('/node_modules/')) {
-        continue;
-      }
-      const visit = (node: TS.Node): void => {
-        if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-          const sym = jsxTagSymbol(node.tagName);
-          if (sym) {
-            const id = symbolId(sym);
-            const list = usageIndex.get(id);
-            if (list) {
-              list.push(node);
-            } else {
-              usageIndex.set(id, [node]);
-            }
-          }
-        } else if (ts.isCallExpression(node)) {
-          const sym = checker.getSymbolAtLocation(node.expression);
-          if (sym) {
-            calledIds.add(symbolId(components.resolveAlias(sym)));
-          }
+    const visit = (node: TS.Node): void => {
+      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+        const sym = jsxTagSymbol(node.tagName);
+        if (sym) {
+          const id = symbolId(sym);
+          const list = usageIndex.get(id) ?? [];
+          list.push(node);
+          usageIndex.set(id, list);
         }
-        ts.forEachChild(node, visit);
-      };
-      visit(sourceFile);
+      } else if (ts.isCallExpression(node)) {
+        const sym = checker.getSymbolAtLocation(node.expression);
+        if (sym) {
+          calledIds.add(symbolId(components.resolveAlias(sym)));
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+
+    for (const sourceFile of program.getSourceFiles()) {
+      // Declarations and dependencies hold no call site this analysis owns.
+      if (!sourceFile.isDeclarationFile && !sourceFile.fileName.includes('/node_modules/')) {
+        visit(sourceFile);
+      }
     }
     return { calledIds, usageIndex };
   }
@@ -219,8 +245,6 @@ export function verdictOf(usageCount: number, real: number, omit: number, ambigu
   return 'manual';
 }
 
-function push<T>(out: T[], value: T | null): void {
-  if (value) {
-    out.push(value);
-  }
+function compact<T>(values: readonly (T | null)[]): T[] {
+  return values.filter((value) => value !== null);
 }
