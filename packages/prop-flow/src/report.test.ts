@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatJson, formatText, hint } from './report.js';
+import { constantHint, formatJson, formatText, hint } from './report.js';
 import type { PropReport, Report, Verdict } from './types.js';
 
 function makeRow(overrides: Partial<PropReport> = {}): PropReport {
   return {
     ambiguous: 0,
     component: 'Button',
+    constant: null,
     hasDefault: false,
     omit: 1,
     prop: 'title',
@@ -69,8 +70,42 @@ describe('formatText', () => {
     `);
   });
 
-  it('says so when a component has no optional props at all', () => {
-    expect(formatText(makeReport({ props: [] }))).toContain('No optional props found.');
+  it('prints the constant value and names the absorbed pass-through', () => {
+    const report = makeReport({
+      props: [
+        makeRow({
+          constant: { coverage: 'all', value: '"lg"' },
+          omit: 0,
+          prop: 'size',
+          real: 2,
+          sites: [
+            {
+              kind: 'passthrough',
+              loc: 'src/relay.tsx:4:5',
+              note: 'omissions fall back to its default',
+              via: 'Relay.size',
+            },
+          ],
+          verdict: 'unnecessary-optional',
+        }),
+        makeRow({
+          component: 'Req',
+          constant: { coverage: 'passes', value: '"primary"' },
+          prop: 'kind',
+          verdict: 'required',
+        }),
+      ],
+    });
+
+    expect(formatText(report)).toContain('   constant="lg"  coverage=all\n');
+    expect(formatText(report)).toContain(' → Relay.size (omissions fall back to its default)\n');
+    expect(formatText(report)).toContain('every call site sees "lg"');
+    expect(formatText(report)).toMatch(/^required\s+Req\.kind$/m);
+    expect(formatText(report)).toContain('every passing call site sends "primary"');
+  });
+
+  it('says so when a component has nothing to report', () => {
+    expect(formatText(makeReport({ props: [] }))).toContain('No props to report.');
   });
 });
 
@@ -84,8 +119,21 @@ describe('hint', () => {
     ['manual', false, 'Check the MANUAL sites'],
     ['unused-component', false, 'no call sites in this Program'],
     ['cycle', false, ''],
+    // A required row's advice is the constancy hint; the verdict adds nothing.
+    ['required', false, ''],
   ])('%s (hasDefault=%s) advises %s', (verdict, hasDefault, expected) => {
     expect(hint(makeRow({ hasDefault, verdict }))).toContain(expected);
+  });
+});
+
+describe('constantHint', () => {
+  it('stays at "could be inlined" — a constant value is not a defect', () => {
+    expect(constantHint(makeRow({ constant: { coverage: 'passes', value: '"sm"' } }))).toContain('could be inlined');
+    expect(constantHint(makeRow({ constant: { coverage: 'all', value: '"sm"' } }))).toContain('the prop dropped');
+  });
+
+  it('has nothing to say without a constant', () => {
+    expect(constantHint(makeRow())).toBe('');
   });
 });
 

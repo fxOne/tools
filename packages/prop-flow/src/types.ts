@@ -10,8 +10,11 @@
  *                        human to check
  *   cycle                the pass-through graph looped back on itself; the
  *                        repeat visit contributes no new information
+ *   required             the prop has no `?` to judge — listed only because it
+ *                        carries a constant value (`--all-props`)
  */
-export type Verdict = 'caller-dead' | 'cycle' | 'justified' | 'manual' | 'unnecessary-optional' | 'unused-component';
+export type Verdict =
+  'caller-dead' | 'cycle' | 'justified' | 'manual' | 'required' | 'unnecessary-optional' | 'unused-component';
 
 export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real';
 
@@ -19,15 +22,34 @@ export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real';
 export interface Site {
   readonly kind: SiteKind;
   readonly loc: string;
-  /** Why it was classified this way — `real`, `omit` and `manual` sites only. */
+  /** Why it was classified this way; a `passthrough` carries one only rarely. */
   readonly note?: string;
-  /** `Component.prop` the value was traced to — `passthrough` sites only. */
+  /**
+   * `Component.prop` the value was traced through. A `passthrough` always
+   * carries one; so does a `real` site whose value is a default that fired one
+   * level up, which is where the trace says *whose* default it was.
+   */
   readonly via?: string;
+}
+
+/**
+ * The same value at every call site the walk could read. Orthogonal to
+ * `Verdict`: a `justified` prop can be constant too, and that combination —
+ * the `?` is correct, yet the prop carries no information — is the most
+ * interesting finding of all.
+ */
+export interface ConstantValue {
+  /** `all` — omissions land on the value too; `passes` — passing sites only. */
+  readonly coverage: 'all' | 'passes';
+  /** Printed as the checker prints it: `"sm"`, `true`, `42`, `Tone.Danger`. */
+  readonly value: string;
 }
 
 /** Counts are of ULTIMATE leaves: pass-throughs are expanded, not counted. */
 export interface PropAnalysis {
   readonly ambiguous: number;
+  /** null unless at least two passing sites agree and none is unreadable. */
+  readonly constant: ConstantValue | null;
   readonly omit: number;
   readonly real: number;
   readonly sites: readonly Site[];
@@ -50,8 +72,11 @@ export interface Report {
   readonly props: readonly PropReport[];
 }
 
-export interface OptionalProp {
+/** One prop a component declares, as the analysis sees it before walking. */
+export interface DeclaredProp {
   /** The binding carries a default: `function C({ size = 'md' }: Props)`. */
   readonly hasDefault: boolean;
   readonly name: string;
+  /** Declared with a `?`. Required props are listed only under `--all-props`. */
+  readonly optional: boolean;
 }

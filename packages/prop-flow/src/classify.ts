@@ -2,6 +2,7 @@ import type * as TS from 'typescript';
 import { bindingKey, findAttr, isComponentFn } from './ast.js';
 import type { Component, ComponentFactory } from './component.js';
 import type { TypeScriptApi } from './typescript-api.js';
+import { BOOLEAN_SHORTHAND_VALUE, literalValueOf } from './values.js';
 
 /** The value is the enclosing component's own prop — climb one level up. */
 interface Passthrough {
@@ -26,6 +27,8 @@ interface Omission {
 interface Real {
   readonly kind: 'real';
   readonly note: string;
+  /** What the value is, printably — null when it is not a single literal. */
+  readonly value: string | null;
 }
 
 /** Where the value a JSX element feeds to one prop comes from. */
@@ -206,10 +209,10 @@ export function createClassifier({ checker, components, ts }: ClassifierOptions)
     const init = attr.initializer;
     // Shorthand boolean: <C flag /> → always a concrete `true`.
     if (init === undefined) {
-      return { kind: 'real', note: 'boolean shorthand' };
+      return { kind: 'real', note: 'boolean shorthand', value: BOOLEAN_SHORTHAND_VALUE };
     }
     if (ts.isStringLiteral(init)) {
-      return { kind: 'real', note: 'string literal' };
+      return realValue(init, 'string literal');
     }
     if (!ts.isJsxExpression(init) || init.expression === undefined) {
       return { kind: 'manual', note: 'unrecognised attribute form' };
@@ -220,26 +223,31 @@ export function createClassifier({ checker, components, ts }: ClassifierOptions)
   /** Where the value an expression evaluates to originates. */
   function classifyExpression(expr: TS.Expression): Classification {
     if (ts.isStringLiteral(expr)) {
-      return { kind: 'real', note: 'string literal' };
+      return realValue(expr, 'string literal');
     }
-    // `prop={undefined}` is an omission dressed up as a pass.
-    if (ts.isIdentifier(expr) && expr.text === 'undefined') {
-      return { kind: 'omit', note: 'explicit undefined' };
-    }
-    // Identifier — a destructured prop of the enclosing component (climb) or a
-    // local value (a real source).
     if (ts.isIdentifier(expr)) {
-      return asDestructuredProp(expr) ?? { kind: 'real', note: 'local value' };
+      // `prop={undefined}` is an omission dressed up as a pass.
+      if (expr.text === 'undefined') {
+        return { kind: 'omit', note: 'explicit undefined' };
+      }
+      // Otherwise a destructured prop of the enclosing component (climb), or a
+      // local value (a real source).
+      return asDestructuredProp(expr) ?? realValue(expr, 'local value');
     }
     // `props.foo` — climb when `props` is the enclosing props parameter.
     if (ts.isPropertyAccessExpression(expr) && ts.isIdentifier(expr.expression)) {
-      return asMemberProp(expr.expression, expr.name.text) ?? { kind: 'real', note: 'member value' };
+      return asMemberProp(expr.expression, expr.name.text) ?? realValue(expr, 'member value');
     }
     // Any other expression (call, object, conditional, JSX, template…) — the
     // value is produced right here. Treat as a real source; a conditional that
     // can yield undefined is the one false positive we accept (conservative:
     // counts as "present").
-    return { kind: 'real', note: ts.SyntaxKind[expr.kind] };
+    return realValue(expr, ts.SyntaxKind[expr.kind]);
+  }
+
+  /** A value written at this call site; `note` says which shape it took. */
+  function realValue(expr: TS.Expression, note: string): Real {
+    return { kind: 'real', note, value: literalValueOf(checker, ts, expr) };
   }
 
   /** `<C prop={text}/>` where `text` is destructured from the props parameter. */

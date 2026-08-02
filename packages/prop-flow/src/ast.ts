@@ -35,15 +35,23 @@ export function unwrapToFn(ts: TypeScriptApi, expr: TS.Expression): ComponentFn 
   return null;
 }
 
-/** Names in `function C({ foo = 1 }: P)` that carry a default initializer. */
-export function defaultedBindingNames(ts: TypeScriptApi, paramNode: TS.ParameterDeclaration): Set<string> {
+/**
+ * Props keys in `function C({ foo = 1 }: P)` that carry a default, mapped to
+ * the default itself. The expression, not just the fact of it: a default is a
+ * value the component feeds itself whenever a caller omits the prop.
+ */
+export function defaultedBindings(ts: TypeScriptApi, paramNode: TS.ParameterDeclaration): Map<string, TS.Expression> {
+  const out = new Map<string, TS.Expression>();
   if (!ts.isObjectBindingPattern(paramNode.name)) {
-    return new Set();
+    return out;
   }
-  const keys = paramNode.name.elements
-    .filter((element) => element.initializer !== undefined)
-    .map((element) => bindingKey(ts, element));
-  return new Set(keys.filter((key) => key !== null));
+  for (const element of paramNode.name.elements) {
+    const key = bindingKey(ts, element);
+    if (element.initializer !== undefined && key !== null) {
+      out.set(key, element.initializer);
+    }
+  }
+  return out;
 }
 
 /** The props key a binding element reads: `{ label: text }` → `label`. */

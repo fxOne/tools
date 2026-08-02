@@ -1,11 +1,20 @@
 import type * as TS from 'typescript';
-import { defaultedBindingNames, isExported, unwrapToFn } from './ast.js';
+import { defaultedBindings, isExported, unwrapToFn } from './ast.js';
 import { createClassifier } from './classify.js';
 import { createComponentFactory } from './component.js';
 import type { Component } from './component.js';
 import { locOf } from './paths.js';
-import type { OptionalProp, PropAnalysis, Site, Verdict } from './types.js';
+import type { ConstantValue, DeclaredProp, PropAnalysis, Site, Verdict } from './types.js';
 import type { TypeScriptApi } from './typescript-api.js';
+import { createUsageIndex } from './usage-index.js';
+import { literalValueOf } from './values.js';
+
+/**
+ * Below this, "always the same value" is trivially true: one passing call site
+ * agrees with itself, and reporting that would fire on every single-use
+ * component.
+ */
+const MIN_CONSTANT_SITES = 2;
 
 export interface AnalyzerOptions {
   /** Paths in the output are printed relative to this directory. */
@@ -18,8 +27,31 @@ export interface AnalyzerOptions {
 interface Contribution {
   readonly ambiguous: number;
   readonly omit: number;
+  /** A value that could not be read as a literal — no constancy is claimable. */
+  readonly poisoned: boolean;
   readonly real: number;
-  readonly site: Site;
+  /** One line per call site, except where absorbing a default splits it up. */
+  readonly sites: readonly Site[];
+  readonly values: readonly string[];
+}
+
+/** The counters a single call site can move — it always moves exactly one. */
+type Counts = Partial<Pick<Contribution, 'ambiguous' | 'omit' | 'real'>>;
+
+/** The raw accumulation of a walk, before `constant` is derived from it. */
+interface Walk {
+  readonly ambiguous: number;
+  readonly omit: number;
+  readonly poisoned: boolean;
+  readonly real: number;
+  readonly sites: readonly Site[];
+  readonly values: ReadonlySet<string>;
+  readonly verdict: Verdict;
+}
+
+export interface ListPropsOptions {
+  /** Also list props declared without a `?` — the `--all-props` mode. */
+  readonly includeRequired?: boolean;
 }
 
 export interface Analyzer {
@@ -27,95 +59,138 @@ export interface Analyzer {
   analyse(component: Component, propName: string): PropAnalysis;
   /** Components exported from `sourceFile` that take a props parameter. */
   findComponents(sourceFile: TS.SourceFile): Component[];
-  listOptionalProps(component: Component): OptionalProp[];
+  listProps(component: Component, options?: ListPropsOptions): DeclaredProp[];
 }
 
 export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer {
   const checker = program.getTypeChecker();
   const components = createComponentFactory({ checker, ts });
   const classifier = createClassifier({ checker, components, ts });
+  const index = createUsageIndex({ checker, components, program, ts });
 
-  // Symbol identity. Symbols are not primitives, so a Map keyed by symbol
-  // works — but the index is keyed by a plain id to keep it printable.
-  const symbolIds = new WeakMap<TS.Symbol, number>();
-  let nextSymbolId = 1;
+  // Binding defaults per component, read once: the walk asks for them at every
+  // pass-through, and again when it decides a constant's coverage.
+  const defaultsById = new Map<number, Map<string, TS.Expression>>();
 
-  // Every JSX usage in the Program, indexed once: component symbol → call
-  // sites, plus the symbols that are CALLED rather than rendered. Building
-  // this eagerly costs one walk and saves one per prop.
-  const { calledIds, usageIndex } = indexProgram();
-
-  return { analyse, findComponents, listOptionalProps };
+  return { analyse, findComponents, listProps };
 
   // ── core analysis ─────────────────────────────────────────────────────────
 
-  function analyse(component: Component, propName: string, visited = new Set<string>()): PropAnalysis {
-    const key = `${symbolId(component.symbol)}#${propName}`;
+  function analyse(component: Component, propName: string): PropAnalysis {
+    const result = walk(component, propName, new Set<string>());
+    return {
+      ambiguous: result.ambiguous,
+      constant: constantOf(component, propName, result),
+      omit: result.omit,
+      real: result.real,
+      sites: result.sites,
+      verdict: result.verdict,
+    };
+  }
+
+  /** Every call site of `component`, merged into counts, sites and values. */
+  function walk(component: Component, propName: string, visited: Set<string>): Walk {
+    const key = `${index.symbolId(component.symbol)}#${propName}`;
     if (visited.has(key)) {
       // A cycle in the pass-through graph. The first visit already counted
       // this subtree, so the repeat contributes nothing.
-      return { ambiguous: 0, omit: 0, real: 0, sites: [], verdict: 'cycle' };
+      return { ambiguous: 0, omit: 0, poisoned: false, real: 0, sites: [], values: new Set(), verdict: 'cycle' };
     }
     visited.add(key);
 
-    const usages = usageIndex.get(symbolId(component.symbol)) ?? [];
-    const sites: Site[] = [];
-    let real = 0;
-    let omit = 0;
-    let ambiguous = 0;
+    const usages = index.usagesOf(component.symbol);
+    const merged = merge(usages.map((el) => contributionOf(el, propName, visited)));
 
-    for (const el of usages) {
-      const contribution = contributionOf(el, propName, visited);
-      real += contribution.real;
-      omit += contribution.omit;
-      ambiguous += contribution.ambiguous;
-      sites.push(contribution.site);
-    }
-
-    return { ambiguous, omit, real, sites, verdict: verdictOf(usages.length, real, omit, ambiguous) };
+    return { ...merged, verdict: verdictOf(usages.length, merged.real, merged.omit, merged.ambiguous) };
   }
 
   /** Classify one call site, expanding a pass-through into what it bottoms out in. */
   function contributionOf(el: TS.JsxOpeningLikeElement, propName: string, visited: Set<string>): Contribution {
     const classified = classifier.classifyElement(el, propName);
+    const loc = locOf(el, cwd);
     if (classified.kind === 'real') {
-      return { ambiguous: 0, omit: 0, real: 1, site: { kind: 'real', loc: locOf(el, cwd), note: classified.note } };
+      return leaf({ real: 1 }, { kind: 'real', loc, note: classified.note }, classified.value);
     }
     if (classified.kind === 'omit') {
-      return { ambiguous: 0, omit: 1, real: 0, site: { kind: 'omit', loc: locOf(el, cwd), note: classified.note } };
+      return leaf({ omit: 1 }, { kind: 'omit', loc, note: classified.note });
     }
     if (classified.kind === 'manual') {
-      return { ambiguous: 1, omit: 0, real: 0, site: { kind: 'manual', loc: locOf(el, cwd), note: classified.note } };
+      return leaf({ ambiguous: 1 }, { kind: 'manual', loc, note: classified.note });
     }
 
     // The value is the enclosing component's own prop — climb.
-    const sub = analyse(classified.component, classified.prop, visited);
-    if (sub.verdict === 'unused-component' && calledIds.has(symbolId(classified.component.symbol))) {
+    const sub = walk(classified.component, classified.prop, visited);
+    if (sub.verdict === 'unused-component' && index.isCalled(classified.component.symbol)) {
       // The climb landed on a plain function taking an options object — a test
       // helper, say. It has callers, they just are not JSX, so the walk cannot
       // see them. Counting the empty subtree would turn an invisible pass into
       // a caller-dead: "delete the prop" on live code.
+      const note = `${classified.component.name}.${classified.prop}: called, never rendered as JSX`;
+      return leaf({ ambiguous: 1 }, { kind: 'manual', loc, note });
+    }
+    return absorbDefault(el, classified.component, classified.prop, sub);
+  }
+
+  /**
+   * An omission one level up does not reach this call site as `undefined` when
+   * the level above binds a default: `Relay({ size = 'lg' })` forwarding
+   * `size` passes `'lg'`. So those omissions are converted into passes of the
+   * default here — anything else reports a prop that is in fact always set as
+   * `caller-dead`, and hands constancy the wrong value.
+   */
+  function absorbDefault(el: TS.JsxOpeningLikeElement, via: Component, viaProp: string, sub: Walk): Contribution {
+    const loc = locOf(el, cwd);
+    const trace = `${via.name}.${viaProp}`;
+    const fallback = defaultsOf(via).get(viaProp);
+    if (sub.omit === 0 || fallback === undefined) {
+      // No omission for the default to catch, or no default to catch it.
       return {
-        ambiguous: 1,
-        omit: 0,
-        real: 0,
-        site: {
-          kind: 'manual',
-          loc: locOf(el, cwd),
-          note: `${classified.component.name}.${classified.prop}: called, never rendered as JSX`,
-        },
+        ambiguous: sub.ambiguous,
+        omit: sub.omit,
+        poisoned: sub.poisoned,
+        real: sub.real,
+        sites: [{ kind: 'passthrough', loc, via: trace }],
+        values: [...sub.values],
       };
     }
+
+    const value = literalValueOf(checker, ts, fallback);
+    // Point at the omissions that just turned into passes: a lone pass-through
+    // line above `passes=2` reads like a miscount. Only the omissions written
+    // at this level are visible — ones arriving through a deeper pass-through
+    // stay behind their own line, as every expanded count already does.
+    const absorbed = sub.sites
+      .filter((site) => site.kind === 'omit')
+      .map((site): Site => ({ kind: 'real', loc: site.loc, note: 'the default fires here', via: trace }));
     return {
       ambiguous: sub.ambiguous,
-      omit: sub.omit,
-      real: sub.real,
-      site: {
-        kind: 'passthrough',
-        loc: locOf(el, cwd),
-        via: `${classified.component.name}.${classified.prop}`,
-      },
+      omit: 0,
+      poisoned: sub.poisoned || value === null,
+      real: sub.real + sub.omit,
+      sites: [{ kind: 'passthrough', loc, note: 'omissions fall back to its default', via: trace }, ...absorbed],
+      values: value === null ? [...sub.values] : [...sub.values, value],
     };
+  }
+
+  /** The one value every readable call site agreed on, if there is one. */
+  function constantOf(component: Component, propName: string, result: Walk): ConstantValue | null {
+    if (result.ambiguous > 0 || result.poisoned || result.real < MIN_CONSTANT_SITES) {
+      return null;
+    }
+    const [value] = result.values;
+    if (value === undefined || result.values.size > 1) {
+      return null;
+    }
+    return { coverage: coverageOf(component, propName, result.omit, value), value };
+  }
+
+  /** Whether the omissions land on the value too — via the binding default. */
+  function coverageOf(component: Component, propName: string, omit: number, value: string): ConstantValue['coverage'] {
+    if (omit === 0) {
+      return 'all';
+    }
+    const fallback = defaultsOf(component).get(propName);
+    return fallback && literalValueOf(checker, ts, fallback) === value ? 'all' : 'passes';
   }
 
   // ── component + prop discovery ────────────────────────────────────────────
@@ -151,16 +226,28 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     return fn ? components.fromNode(fn, decl.name) : null;
   }
 
-  function listOptionalProps(component: Component): OptionalProp[] {
+  function listProps(component: Component, { includeRequired = false }: ListPropsOptions = {}): DeclaredProp[] {
     const type = checker.getTypeAtLocation(component.paramNode);
-    const defaults = defaultedBindingNames(ts, component.paramNode);
-    const out: OptionalProp[] = [];
+    const defaults = defaultsOf(component);
+    const out: DeclaredProp[] = [];
     for (const sym of type.getProperties()) {
-      if ((sym.getFlags() & ts.SymbolFlags.Optional) !== 0 && !isVendored(sym)) {
-        out.push({ hasDefault: defaults.has(sym.getName()), name: sym.getName() });
+      const optional = (sym.getFlags() & ts.SymbolFlags.Optional) !== 0;
+      if ((optional || includeRequired) && !isVendored(sym)) {
+        out.push({ optional, hasDefault: defaults.has(sym.getName()), name: sym.getName() });
       }
     }
     return out;
+  }
+
+  function defaultsOf(component: Component): Map<string, TS.Expression> {
+    const id = index.symbolId(component.symbol);
+    const known = defaultsById.get(id);
+    if (known) {
+      return known;
+    }
+    const defaults = defaultedBindings(ts, component.paramNode);
+    defaultsById.set(id, defaults);
+    return defaults;
   }
 
   /**
@@ -176,54 +263,39 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
       declarations.every((declaration) => program.isSourceFileFromExternalLibrary(declaration.getSourceFile()))
     );
   }
+}
 
-  // ── JSX usage index ───────────────────────────────────────────────────────
+/**
+ * A call site that bottoms out here: it moves one counter and contributes one
+ * report line. Only a `real` site carries a value, and only a `real` one can
+ * poison the constancy claim — a `manual` site already suppresses it through
+ * `ambiguous`, and an omission has no value to be unreadable in the first place.
+ */
+function leaf(counts: Counts, site: Site, value: string | null = null): Contribution {
+  return {
+    ambiguous: counts.ambiguous ?? 0,
+    omit: counts.omit ?? 0,
+    poisoned: site.kind === 'real' && value === null,
+    real: counts.real ?? 0,
+    sites: [site],
+    values: value === null ? [] : [value],
+  };
+}
 
-  function indexProgram(): { calledIds: Set<number>; usageIndex: Map<number, TS.JsxOpeningLikeElement[]> } {
-    const calledIds = new Set<number>();
-    const usageIndex = new Map<number, TS.JsxOpeningLikeElement[]>();
-    const visit = (node: TS.Node): void => {
-      if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
-        const sym = jsxTagSymbol(node.tagName);
-        if (sym) {
-          const id = symbolId(sym);
-          const list = usageIndex.get(id) ?? [];
-          list.push(node);
-          usageIndex.set(id, list);
-        }
-      } else if (ts.isCallExpression(node)) {
-        const sym = checker.getSymbolAtLocation(node.expression);
-        if (sym) {
-          calledIds.add(symbolId(components.resolveAlias(sym)));
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
+/** Fold every call site's contribution into the walk's totals. */
+function merge(contributions: readonly Contribution[]): Omit<Walk, 'verdict'> {
+  return {
+    ambiguous: total(contributions, 'ambiguous'),
+    omit: total(contributions, 'omit'),
+    poisoned: contributions.some((contribution) => contribution.poisoned),
+    real: total(contributions, 'real'),
+    sites: contributions.flatMap((contribution) => contribution.sites),
+    values: new Set(contributions.flatMap((contribution) => contribution.values)),
+  };
+}
 
-    for (const sourceFile of program.getSourceFiles()) {
-      // Declarations and dependencies hold no call site this analysis owns.
-      if (!sourceFile.isDeclarationFile && !sourceFile.fileName.includes('/node_modules/')) {
-        visit(sourceFile);
-      }
-    }
-    return { calledIds, usageIndex };
-  }
-
-  function jsxTagSymbol(tagName: TS.JsxTagNameExpression): TS.Symbol | null {
-    // Intrinsics (<div/>) have no symbol; <Ns.Foo/> resolves on the property.
-    const sym = checker.getSymbolAtLocation(tagName);
-    return sym ? components.resolveAlias(sym) : null;
-  }
-
-  function symbolId(sym: TS.Symbol): number {
-    let id = symbolIds.get(sym);
-    if (id === undefined) {
-      id = nextSymbolId;
-      nextSymbolId += 1;
-      symbolIds.set(sym, id);
-    }
-    return id;
-  }
+function total(contributions: readonly Contribution[], counter: keyof Counts): number {
+  return contributions.reduce((sum, contribution) => sum + contribution[counter], 0);
 }
 
 export function verdictOf(usageCount: number, real: number, omit: number, ambiguous: number): Verdict {

@@ -17,15 +17,18 @@ export interface CliContext {
 }
 
 export const USAGE =
-  'Usage: prop-flow <file> [propName] [--tsconfig <path>] [--json]\n\n' +
-  '  <file>      a .ts/.tsx file containing the component(s) to inspect\n' +
-  '  [propName]  one prop; omitted → every optional prop of every component\n' +
-  '              exported from the file\n' +
-  '  --tsconfig  override the auto-discovered tsconfig (use the broadest\n' +
-  '              "solution" config so call sites in other packages are seen)\n' +
-  '  --json      machine-readable output\n\n' +
+  'Usage: prop-flow <file> [propName] [--tsconfig <path>] [--all-props] [--json]\n\n' +
+  '  <file>       a .ts/.tsx file containing the component(s) to inspect\n' +
+  '  [propName]   one prop; omitted → every optional prop of every component\n' +
+  '               exported from the file\n' +
+  '  --tsconfig   override the auto-discovered tsconfig (use the broadest\n' +
+  '               "solution" config so call sites in other packages are seen)\n' +
+  '  --all-props  inspect required props too, reported only where they are\n' +
+  '               passed the same value at every call site\n' +
+  '  --json       machine-readable output\n\n' +
   'Trace an optional prop up every JSX call site and report whether its\n' +
-  '`?` is justified, needless, or the prop is never passed (caller-dead).\n';
+  '`?` is justified, needless, or the prop is never passed (caller-dead),\n' +
+  'plus whether every call site sends it one and the same value.\n';
 
 /** Exit codes: 0 ok, 1 nothing to do (usage printed), 2 a handled failure. */
 export function runCli(argv: readonly string[], context: CliContext): number {
@@ -36,6 +39,7 @@ export function runCli(argv: readonly string[], context: CliContext): number {
       return args.help ? 0 : 1;
     }
     const report = analyseProps({
+      allProps: args.allProps,
       cwd: context.cwd,
       file: args.file,
       prop: args.prop,

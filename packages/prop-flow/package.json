@@ -1,6 +1,6 @@
 {
   "name": "@fxone/prop-flow",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "trace an optional prop across every JSX call site and tell whether its `?` is justified",
   "keywords": [
     "typescript",

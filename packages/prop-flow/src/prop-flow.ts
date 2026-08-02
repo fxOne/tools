@@ -10,6 +10,11 @@ import { loadTypeScript } from './typescript-api.js';
 import type { TypeScriptApi } from './typescript-api.js';
 
 export interface AnalyseOptions {
+  /**
+   * Also inspect required props. They are reported only when they carry a
+   * constant value — there is no `?` on them to pass a verdict on.
+   */
+  readonly allProps?: boolean;
   /** Root for path resolution and for shortening printed paths. */
   readonly cwd?: string;
   /** A .ts/.tsx file containing the component(s) to inspect. */
@@ -27,7 +32,8 @@ export interface AnalyseOptions {
 
 /**
  * Trace every optional prop of every component exported from `file` up the
- * JSX call sites across the whole Program.
+ * JSX call sites across the whole Program. With `allProps`, required props
+ * join in — but only where they turn out to carry a constant value.
  */
 export function analyseProps(options: AnalyseOptions): Report {
   const cwd = options.cwd ?? process.cwd();
@@ -58,25 +64,35 @@ export function analyseProps(options: AnalyseOptions): Report {
     throw new PropFlowError(`No exported component with a typed props object found in ${relativeTo(cwd, file)}.`);
   }
 
+  const allProps = options.allProps ?? false;
   const propName = options.prop ?? null;
   const props: PropReport[] = [];
+  let matched = 0;
   for (const component of components) {
-    const optional = analyzer.listOptionalProps(component);
-    const selected = propName === null ? optional : optional.filter((prop) => prop.name === propName);
+    const declared = analyzer.listProps(component, { includeRequired: allProps });
+    const selected = propName === null ? declared : declared.filter((prop) => prop.name === propName);
     for (const prop of selected) {
+      matched += 1;
+      const analysis = analyzer.analyse(component, prop.name);
+      // A prop with no `?` has nothing for the verdicts to say: `justified` and
+      // `caller-dead` are impossible on it and `unnecessary-optional` is a lie.
+      // Its constant value is the whole reason it is here — no value, no row.
+      if (!prop.optional && analysis.constant === null) {
+        continue;
+      }
       props.push({
-        ...analyzer.analyse(component, prop.name),
+        ...analysis,
         component: component.name,
         hasDefault: prop.hasDefault,
         prop: prop.name,
+        verdict: prop.optional ? analysis.verdict : 'required',
       });
     }
   }
 
-  if (propName !== null && props.length === 0) {
-    throw new PropFlowError(
-      `'${propName}' is not an optional prop of any component exported from ${relativeTo(cwd, file)}.`,
-    );
+  if (propName !== null && matched === 0) {
+    const scope = allProps ? 'a prop' : 'an optional prop';
+    throw new PropFlowError(`'${propName}' is not ${scope} of any component exported from ${relativeTo(cwd, file)}.`);
   }
 
   return {

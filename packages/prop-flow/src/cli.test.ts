@@ -3,6 +3,8 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { runCli } from './cli.js';
 import type { CliContext, OutputStream } from './cli.js';
+import type { Report } from './types.js';
+import type { TypeScriptApi } from './typescript-api.js';
 
 const FIXTURE_DIR = resolve(import.meta.dirname, '../fixtures/basic');
 
@@ -45,6 +47,28 @@ describe('runCli', () => {
     });
   });
 
+  it('reaches required props with --all-props', () => {
+    const { code, stdout } = run(['--all-props', 'constant.tsx', 'kind']);
+
+    expect(code).toBe(0);
+    expect(stdout).toMatch(/required\s+Req\.kind/);
+    expect(stdout).toContain('constant="primary"  coverage=all');
+  });
+
+  it('carries the constant value into --json, null where there is none', () => {
+    const { code, stdout } = run(['--json', 'constant.tsx', 'size']);
+    const report = JSON.parse(stdout) as Report;
+
+    expect(code).toBe(0);
+    expect(report.props.map((row) => [`${row.component}.${row.prop}`, row.constant])).toEqual([
+      ['Tile.size', { coverage: 'all', value: '"md"' }],
+      ['Hop.size', { coverage: 'all', value: '"lg"' }],
+      ['Relay.size', null],
+      ['Dim.size', null],
+      ['Vague.size', null],
+    ]);
+  });
+
   it('prints usage on --help and exits 0', () => {
     const { code, stdout } = run(['--help']);
 
@@ -68,5 +92,24 @@ describe('runCli', () => {
     expect(code).toBe(2);
     expect(stdout).toBe('');
     expect(stderr).toContain(message);
+  });
+
+  it('lets an unexpected failure through instead of dressing it as exit 2', () => {
+    // Only PropFlowError means "handled". Anything else is a bug in prop-flow
+    // or in the compiler, and swallowing it into a one-line message would hide
+    // the stack that says so.
+    const stdout = new Capture();
+    const stderr = new Capture();
+    const broken = {
+      ...ts,
+      createProgram: () => {
+        throw new TypeError('the compiler exploded');
+      },
+    } as unknown as TypeScriptApi;
+
+    expect(() => runCli(['button.tsx'], { cwd: FIXTURE_DIR, stderr, stdout, ts: broken })).toThrow(
+      'the compiler exploded',
+    );
+    expect(stderr.text).toBe('');
   });
 });

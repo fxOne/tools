@@ -5,13 +5,17 @@ import { PropFlowError } from './errors.js';
 describe('parseArgs', () => {
   it('reads the file, the prop and the flags in any order', () => {
     expect(parseArgs(['src/Button.tsx'])).toEqual({
+      allProps: false,
       file: 'src/Button.tsx',
       help: false,
       json: false,
       prop: null,
       tsconfig: null,
     });
-    expect(parseArgs(['--json', 'src/Button.tsx', '--tsconfig', 'tsconfig.base.json', 'title'])).toEqual({
+    expect(
+      parseArgs(['--json', 'src/Button.tsx', '--all-props', '--tsconfig', 'tsconfig.base.json', 'title']),
+    ).toEqual({
+      allProps: true,
       file: 'src/Button.tsx',
       help: false,
       json: true,
@@ -26,6 +30,14 @@ describe('parseArgs', () => {
 
   it('reports nothing to do for an empty argv', () => {
     expect(parseArgs([])).toMatchObject({ help: false, file: null });
+  });
+
+  it('skips a hole in argv rather than reading it as a positional', () => {
+    // `parseArgs` is exported, so the argv is not always `process.argv.slice(2)`
+    // — a gap must be stepped over, not shifted into the [propName] slot.
+    const argv = ['src/Button.tsx', undefined, 'title'] as unknown as string[];
+
+    expect(parseArgs(argv)).toMatchObject({ file: 'src/Button.tsx', prop: 'title' });
   });
 
   it.each([
