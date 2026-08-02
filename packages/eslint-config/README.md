@@ -14,14 +14,15 @@ $ pnpm add @fxone/eslint-config -D
 $ yarn add @fxone/eslint-config -D
 ```
 
-**Important:** You must also install ESLint as a peer dependency:
+**Important:** You must also install ESLint and its rule package as peer
+dependencies:
 
 ```bash
-$ npm install eslint -D
+$ npm install eslint @eslint/js -D
 # or
-$ pnpm add eslint -D
+$ pnpm add eslint @eslint/js -D
 # or
-$ yarn add eslint -D
+$ yarn add eslint @eslint/js -D
 ```
 
 Alternatively, use `npx install-peerdeps` to automatically install peer dependencies:
@@ -41,3 +42,10 @@ export default [
     ...config
 ];
 ```
+
+## Formatting
+
+This config formats through `@stylistic/eslint-plugin` — `eslint --fix` is the
+formatter. Do not run Prettier alongside it: the two disagree on operator
+line breaks, binary operand indentation and quoted properties, and each will
+undo the other's output.

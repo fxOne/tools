@@ -5,6 +5,22 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 5.0.0
+
+- **BREAKING CHANGE**: Move `@eslint/js` to peer dependencies
+- Users must now install `@eslint/js` manually, next to `eslint`
+- The config imported `@eslint/js` without ever declaring it, so consumers with
+  a strict `node_modules` layout failed with `Cannot find package '@eslint/js'`
+- **BREAKING CHANGE**: Drop `eslint-config-prettier` and `eslint-plugin-prettier`
+- `@stylistic` is the formatter; `eslint --fix` replaces a Prettier run. Projects
+  that still run Prettier next to this config will now see the two fight
+- `eslint-config-prettier` sat before the `@stylistic` block, which re-enabled
+  the 63 rules it had just switched off — it only ever suppressed
+  `no-unexpected-multiline`, which is active again now
+- `eslint-plugin-prettier` was a dependency that the config never imported
+- Remove the `@stylistic/indent-binary-ops: 0` override, which the `@stylistic`
+  block behind it overruled — the rule was on regardless, and stays on
+
 ## 4.1.1
 
 - update dependencies

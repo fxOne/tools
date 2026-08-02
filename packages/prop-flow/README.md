@@ -1,0 +1,97 @@
+# prop-flow
+
+_Does an optional prop's `?` actually earn its keep?_
+
+For one component prop, prop-flow walks every JSX call site across the whole
+TypeScript Program and follows pass-through chains **up** the component tree,
+across package boundaries, until each path bottoms out in a real source or an
+omission. Then it says whether the `?` is justified, needless, or the prop is
+fed `undefined` everywhere — the caller-side dead case that both `tsc` and
+`knip` miss, because the prop _is_ used inside the component, just never
+passed in.
+
+Why this exists: when a prop is optional all the way up a chain, you can't tell
+from one file whether the value ever originates anywhere. Removing one `?` just
+chases the type error one level higher; tracing four or five props by hand is an
+afternoon. This does the climb in one pass.
+
+## Installation
+
+```bash
+$ pnpm add @fxone/prop-flow -D
+```
+
+TypeScript is a peer dependency — prop-flow deliberately ships none of its own
+and loads the **target project's** compiler, resolved from the current working
+directory, so it always analyses your code with the compiler your code uses.
+
+## Usage
+
+```bash
+$ pnpm prop-flow <file> [propName] [--tsconfig <path>] [--json]
+```
+
+| argument     | meaning                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `<file>`     | a `.ts`/`.tsx` file containing the component(s) to inspect                                                          |
+| `[propName]` | one prop; omitted → every optional prop of every component exported from the file                                   |
+| `--tsconfig` | override the auto-discovered tsconfig — use the broadest "solution" config so call sites in other packages are seen |
+| `--json`     | machine-readable output                                                                                             |
+
+```
+$ pnpm prop-flow src/Button.tsx title
+
+tsconfig: tsconfig.json  (412 files in Program)
+file:     src/Button.tsx
+
+justified         Button.title
+   passes=2  omits=2  ambiguous=0
+     real        src/App.tsx:12:7 (string literal)
+     omit        src/App.tsx:13:7
+     passthrough src/Card.tsx:9:5 → Card.action
+   → genuinely sometimes-absent. The `?` is correct.
+```
+
+## Verdicts
+
+| verdict                | meaning                                                                  |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `justified`            | some call sites pass it, some omit it → the `?` earns its keep           |
+| `unnecessary-optional` | every call site passes it → could be required                            |
+| `caller-dead`          | no call site passes it → optional and always `undefined`                 |
+| `unused-component`     | the component itself has no call sites in the Program                    |
+| `manual`               | a spread / rename / dynamic value on the path blocks a static conclusion |
+
+Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
+failure (message on stderr).
+
+## API
+
+The same analysis is available programmatically:
+
+```ts
+import { analyseProps, formatText } from '@fxone/prop-flow';
+
+const report = analyseProps({ file: 'src/Button.tsx', prop: 'title' });
+process.stdout.write(formatText(report));
+```
+
+`analyseProps` accepts `{ cwd, file, prop, ts, tsconfig }` and returns a
+`Report`; passing `ts` injects a specific compiler instead of resolving one
+from `cwd`.
+
+## Limitations
+
+Pass-throughs are followed through plain identifiers and `props.x` member
+access. A spread (`{...rest}`) and a rest element in the props destructure are
+reported as `manual` rather than guessed at. `prop={undefined}` counts as an
+omission — it is an omission dressed up as a pass, so a prop that is only ever
+fed `undefined` still comes out as `caller-dead`. A conditional expression that
+can evaluate to `undefined` counts as a real source — the one false positive the
+tool accepts on purpose.
+
+Components are picked up from `export function C`, `export const C = …`
+(including `memo()` / `forwardRef()` wrappers), `export default function C` and
+`export { C }` at the bottom of the file. A component re-exported through a
+barrel is still found at its call sites, but must be inspected in the file that
+declares it.

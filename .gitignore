@@ -5,6 +5,10 @@ node_modules
 
 # build
 /lib/
+dist
+
+# test coverage
+coverage
 
 # NPM debug
 npm-debug.log

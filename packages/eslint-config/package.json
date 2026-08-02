@@ -2,18 +2,20 @@
   "author": "fxOne <fxOne@users.noreply.github.com>",
   "dependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-sort-keys-shorthand": "^5.0.0",
     "typescript-eslint": "^8.58.1"
   },
   "peerDependencies": {
+    "@eslint/js": "^10.0.0",
     "eslint": "^10.0.0",
     "typescript": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
+    "@eslint/js": {
+      "optional": false
+    },
     "eslint": {
       "optional": false
     },
@@ -31,5 +33,5 @@
   },
   "repository": "https://github.com/fxOne/tools.git",
   "type": "module",
-  "version": "4.1.1"
+  "version": "5.0.0"
 }

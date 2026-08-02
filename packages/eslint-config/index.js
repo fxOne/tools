@@ -1,6 +1,5 @@
 import eslint from '@eslint/js';
 import stylistic from '@stylistic/eslint-plugin';
-import eslintConfigPrettier from 'eslint-config-prettier';
 import react from 'eslint-plugin-react';
 import reactHooks from 'eslint-plugin-react-hooks';
 import sortKeysShorthand from 'eslint-plugin-sort-keys-shorthand';
@@ -18,7 +17,6 @@ export default defineConfig(
   eslint.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   tseslint.configs.stylisticTypeChecked,
-  eslintConfigPrettier,
   react.configs.flat.recommended,
   reactHooks.configs.flat.recommended,
   {
@@ -32,7 +30,6 @@ export default defineConfig(
     },
     rules: {
       "react/react-in-jsx-scope": "off",
-      '@stylistic/indent-binary-ops': 0,
       'no-console': ['error', { allow: ['warn', 'error'] }],
       '@typescript-eslint/ban-ts-comment': ['error', {
         'ts-check': 'allow-with-description',
