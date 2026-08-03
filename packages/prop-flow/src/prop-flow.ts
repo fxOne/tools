@@ -59,10 +59,13 @@ export function analyseProps(options: AnalyseOptions): Report {
   }
 
   const analyzer = createAnalyzer({ cwd, program, ts });
+  // No component is not a failure — it is the answer for a route module or a
+  // props-less page, and it belongs on the same path as a component whose props
+  // are all required. Both come back as an empty `props`; `components` says
+  // which one it was. Failing here instead would mean a caller looping over
+  // changed files has to tell "nothing to analyse" apart from "could not
+  // analyse" by reading a message.
   const components = analyzer.findComponents(sourceFile);
-  if (components.length === 0) {
-    throw new PropFlowError(`No exported component with a typed props object found in ${relativeTo(cwd, file)}.`);
-  }
 
   const allProps = options.allProps ?? false;
   const propName = options.prop ?? null;
@@ -97,6 +100,7 @@ export function analyseProps(options: AnalyseOptions): Report {
 
   return {
     props,
+    components: components.length,
     configPath: relativeTo(cwd, configPath),
     file: relativeTo(cwd, file),
     fileCount: program.getSourceFiles().length,

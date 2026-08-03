@@ -1,7 +1,7 @@
 import { parseArgs } from './args.js';
 import { PropFlowError } from './errors.js';
 import { analyseProps } from './prop-flow.js';
-import { formatJson, formatText } from './report.js';
+import { formatJson, formatJsonError, formatText } from './report.js';
 import type { TypeScriptApi } from './typescript-api.js';
 
 export interface OutputStream {
@@ -30,8 +30,14 @@ export const USAGE =
   '`?` is justified, needless, or the prop is never passed (caller-dead),\n' +
   'plus whether every call site sends it one and the same value.\n';
 
-/** Exit codes: 0 ok, 1 nothing to do (usage printed), 2 a handled failure. */
+/**
+ * Exit codes: 0 ok — including a file with nothing to analyse — 1 nothing to do
+ * (usage printed), 2 a handled failure.
+ */
 export function runCli(argv: readonly string[], context: CliContext): number {
+  // Read off the raw argv rather than off the parsed args, so the JSON envelope
+  // also covers a failure to parse the arguments themselves.
+  const json = argv.includes('--json');
   try {
     const args = parseArgs(argv);
     if (args.help || args.file === null) {
@@ -50,7 +56,11 @@ export function runCli(argv: readonly string[], context: CliContext): number {
     return 0;
   } catch (error) {
     if (error instanceof PropFlowError) {
-      context.stderr.write(`prop-flow: ${error.message}\n`);
+      if (json) {
+        context.stdout.write(formatJsonError(error.message));
+      } else {
+        context.stderr.write(`prop-flow: ${error.message}\n`);
+      }
       return 2;
     }
     throw error;

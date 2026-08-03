@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { constantHint, formatJson, formatText, hint } from './report.js';
+import { constantHint, formatJson, formatJsonError, formatText, hint } from './report.js';
 import type { PropReport, Report, Verdict } from './types.js';
 
 function makeRow(overrides: Partial<PropReport> = {}): PropReport {
@@ -22,6 +22,7 @@ function makeRow(overrides: Partial<PropReport> = {}): PropReport {
 
 function makeReport(overrides: Partial<Report> = {}): Report {
   return {
+    components: 1,
     configPath: 'tsconfig.json',
     file: 'src/button.tsx',
     fileCount: 42,
@@ -104,8 +105,20 @@ describe('formatText', () => {
     expect(formatText(report)).toContain('every passing call site sends "primary"');
   });
 
-  it('says so when a component has nothing to report', () => {
+  it('tells the two empty reports apart', () => {
+    // Same empty `props`, different answers: one component's props are all
+    // required, the other file has no component at all — and only the first
+    // could ever grow a finding.
     expect(formatText(makeReport({ props: [] }))).toContain('No props to report.');
+    expect(formatText(makeReport({ components: 0, props: [] }))).toContain(
+      'No exported component with a typed props object.',
+    );
+  });
+
+  it('keeps the header on an empty report, so the Program is still accounted for', () => {
+    // Without it, "nothing found" and "the tsconfig pulled in three files"
+    // look the same — and the second is the one worth noticing.
+    expect(formatText(makeReport({ components: 0, props: [] }))).toContain('(42 files in Program)');
   });
 });
 
@@ -143,6 +156,15 @@ describe('formatJson', () => {
     const json = formatJson(report);
 
     expect(JSON.parse(json)).toEqual(report);
+    expect(json.endsWith('\n')).toBe(true);
+  });
+});
+
+describe('formatJsonError', () => {
+  it('wraps the message so a failed file stays parsable in a stream', () => {
+    const json = formatJsonError('File not found: /x/nope.tsx');
+
+    expect(JSON.parse(json)).toEqual({ error: 'File not found: /x/nope.tsx' });
     expect(json.endsWith('\n')).toBe(true);
   });
 });

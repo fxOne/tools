@@ -8,7 +8,7 @@ export type { Component } from './component.js';
 export { PropFlowError } from './errors.js';
 export { analyseProps } from './prop-flow.js';
 export type { AnalyseOptions } from './prop-flow.js';
-export { formatJson, formatText } from './report.js';
+export { formatJson, formatJsonError, formatText } from './report.js';
 export { discoverTsconfig, readTsConfig } from './tsconfig.js';
 export type {
   ConstantValue,

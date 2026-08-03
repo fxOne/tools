@@ -69,6 +69,40 @@ describe('runCli', () => {
     ]);
   });
 
+  it('exits 0 on a file with nothing to analyse, in both output modes', () => {
+    // The whole point of the exit code: a loop over changed files must be able
+    // to stop on a real failure without stopping on a page component.
+    const text = run(['app.tsx']);
+    const json = run(['--json', 'app.tsx']);
+
+    expect(text.code).toBe(0);
+    expect(text.stderr).toBe('');
+    expect(text.stdout).toContain('No exported component with a typed props object.');
+    expect(json.code).toBe(0);
+    expect(JSON.parse(json.stdout)).toMatchObject({ components: 0, file: 'app.tsx', props: [] });
+  });
+
+  it('puts a handled failure into the JSON stream instead of onto stderr', () => {
+    // One object per invocation, whatever happens — a bare error line in the
+    // middle of a `for f in …; do prop-flow "$f" --json; done` would break the
+    // parse for every other file in the stream, not just the failing one.
+    const { code, stderr, stdout } = run(['--json', 'missing.tsx']);
+
+    expect(code).toBe(2);
+    expect(stderr).toBe('');
+    expect((JSON.parse(stdout) as { error: string }).error).toContain('File not found');
+  });
+
+  it('reaches the JSON envelope even when it is the arguments that are bad', () => {
+    // `--json` is read off the raw argv, so a parse failure lands in the
+    // envelope too — which is when a caller is least able to guess the shape.
+    const { code, stderr, stdout } = run(['--json', '--nope', 'button.tsx']);
+
+    expect(code).toBe(2);
+    expect(stderr).toBe('');
+    expect(JSON.parse(stdout)).toEqual({ error: 'Unknown option: --nope' });
+  });
+
   it('prints usage on --help and exits 0', () => {
     const { code, stdout } = run(['--help']);
 
