@@ -25,8 +25,33 @@ describe('analyseProps', () => {
       'Button.size': 'unnecessary-optional',
       'Button.title': 'justified',
     });
-    expect(report).toMatchObject({ configPath: 'tsconfig.json', file: 'button.tsx' });
+    expect(report).toMatchObject({ components: 1, configPath: 'tsconfig.json', file: 'button.tsx' });
     expect(report.fileCount).toBeGreaterThan(1);
+  });
+
+  it('reports a file without components as an empty report, not as a failure', () => {
+    // A route module or a props-less page is not a broken input — the honest
+    // answer is "nothing to analyse", and a caller looping over changed files
+    // must be able to tell that apart from "could not analyse" without reading
+    // a message. `components` is what says which empty this is.
+    const report = analyse('app.tsx');
+
+    expect(report).toMatchObject({ components: 0, file: 'app.tsx', props: [] });
+  });
+
+  it('leaves hooks out of discovery, and counts what is left', () => {
+    // `useFilter({ initial })` is shaped like a component and has no JSX call
+    // sites, so every option of it would come back `unused-component`. What is
+    // narrowed is the `use` + capital shape, not everything spelled `use…`:
+    // `used` is a component and stays one, and `components` counts the two that
+    // survive rather than reducing to "found something".
+    const report = analyse('hooks.tsx');
+
+    expect(report.components).toBe(2);
+    expect(verdicts(report)).toEqual({
+      'FilterChip.label': 'unused-component',
+      'used.tone': 'unused-component',
+    });
   });
 
   it('narrows to a single prop when one is named', () => {
@@ -81,7 +106,9 @@ describe('analyseProps', () => {
   it.each([
     ['nope.tsx', undefined, /File not found/],
     ['button.tsx', 'nope', /'nope' is not an optional prop/],
-    ['app.tsx', undefined, /No exported component/],
+    // A named prop that no component declares is a typo in the argument, and
+    // stays a failure even where the file has no component to declare it.
+    ['app.tsx', 'nope', /'nope' is not an optional prop/],
   ])('rejects %s %s', (file, prop, message) => {
     expect(() => analyse(file, prop)).toThrow(PropFlowError);
     expect(() => analyse(file, prop)).toThrow(message);

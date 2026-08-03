@@ -20,9 +20,25 @@ export function formatJson(report: Report): string {
   return `${JSON.stringify(report, null, 2)}\n`;
 }
 
+/**
+ * The `--json` counterpart of the stderr line. Under `--json` every terminating
+ * outcome is one object on stdout, so a loop over files can pipe straight into
+ * `jq`: a bare error line in the middle of the stream would break the parse for
+ * every other file too.
+ */
+export function formatJsonError(message: string): string {
+  return `${JSON.stringify({ error: message }, null, 2)}\n`;
+}
+
 export function formatText(report: Report): string {
   const head =
     `tsconfig: ${report.configPath}  (${report.fileCount} files in Program)\n` + `file:     ${report.file}\n\n`;
+  // Two ways to have nothing to say, and which one it was decides whether there
+  // is anything to do about it: adding props to a route module is not on the
+  // table, adding a `?` somewhere might be.
+  if (report.components === 0) {
+    return `${head}No exported component with a typed props object.\n`;
+  }
   if (report.props.length === 0) {
     return `${head}No props to report.\n`;
   }

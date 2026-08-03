@@ -63,6 +63,13 @@ export interface PropReport extends PropAnalysis {
 }
 
 export interface Report {
+  /**
+   * Exported components with a typed props object found in `file`. Zero is a
+   * result, not a failure — a route module or a props-less page has none, and
+   * that is the answer. It is what tells an empty `props` apart: no component
+   * to look at, versus a component whose props are all required.
+   */
+  readonly components: number;
   /** tsconfig the Program was built from, relative to cwd. */
   readonly configPath: string;
   /** Inspected file, relative to cwd. */

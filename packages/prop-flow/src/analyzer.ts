@@ -196,7 +196,7 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
   // ── component + prop discovery ────────────────────────────────────────────
 
   function findComponents(sourceFile: TS.SourceFile): Component[] {
-    return sourceFile.statements.flatMap((stmt) => componentsOfStatement(stmt));
+    return sourceFile.statements.flatMap((stmt) => componentsOfStatement(stmt)).filter(({ name }) => !isHook(name));
   }
 
   /** The components one top-level statement declares or exports. */
@@ -319,4 +319,19 @@ export function verdictOf(usageCount: number, real: number, omit: number, ambigu
 
 function compact<T>(values: readonly (T | null)[]): T[] {
   return values.filter((value) => value !== null);
+}
+
+/**
+ * A `useX` taking an options object looks exactly like a component to the AST,
+ * and it is not one: a hook has no JSX call sites, so every one of its options
+ * comes back `unused-component`. That is not a finding, it is the walk pointed
+ * at the wrong kind of function — the callers exist, they are just invisible to
+ * a JSX walk. The `use` prefix is the one naming convention safe to key on;
+ * lower-cased components are rare but legal, so PascalCase is not.
+ *
+ * Only *discovery* is narrowed. A prop that passes through a hook on its way
+ * down is still traced, and still reported at the component that declares it.
+ */
+function isHook(name: string): boolean {
+  return /^use[A-Z]/.test(name);
 }

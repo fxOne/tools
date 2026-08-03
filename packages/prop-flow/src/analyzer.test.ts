@@ -261,6 +261,12 @@ describe('createAnalyzer', () => {
     expect(analyzer.findComponents(sourceFile('late.tsx')).map(({ name }) => name)).toEqual(['Aliased', 'Late']);
     // App takes no props, so there is nothing to analyse in it.
     expect(analyzer.findComponents(sourceFile('app.tsx'))).toEqual([]);
+    // A `useX` taking an options object is indistinguishable from a component
+    // to the AST, and has no JSX call sites — its options would come back
+    // `unused-component`, which says nothing about the hook. `used` is the
+    // near miss the pattern has to survive: `use` alone is not the signal, and
+    // a lower-cased component is legal.
+    expect(analyzer.findComponents(sourceFile('hooks.tsx')).map(({ name }) => name)).toEqual(['FilterChip', 'used']);
 
     const [button] = analyzer.findComponents(sourceFile('button.tsx'));
     expect(button && analyzer.listProps(button)).toEqual([

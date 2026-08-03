@@ -5,6 +5,38 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.0.0
+
+- **BREAKING CHANGE**: a file with no exported component is no longer a failure.
+  It exits `0` with an empty report instead of `2` with a message on stderr —
+  a route module or a props-less page has nothing to analyse, and that is an
+  answer, not a broken input. Exit `2` now means only what actually blocked the
+  analysis: a missing file, no resolvable compiler, a tsconfig that does not
+  span the file. A caller looping over changed files can finally stop on a real
+  failure without stopping on a page component
+- **BREAKING CHANGE**: `Report` carries a required `components` field — the
+  number of exported components with a typed props object. It is what tells the
+  two empty reports apart: no component to look at (`0`), versus a component
+  whose props are all required
+- **BREAKING CHANGE**: under `--json` a handled failure is now a `{"error": …}`
+  object on **stdout** instead of a line on stderr, so an invocation that names
+  a file emits exactly one JSON object whatever happens. A `for f in …; do
+  prop-flow "$f" --json; done | jq -s` no longer breaks on the whole stream
+  because one file failed. `--json` is read off the raw argv, so a bad argument
+  reaches the envelope too. Without `--json` the stderr line is unchanged.
+  Usage output is deliberately left outside the envelope: `--help`, and exit `1`
+  for an invocation with no file, still print plain text — both answer a person,
+  and neither is reachable from a loop that passes a file every time
+- An exported `useX` taking an options object is no longer reported. It is
+  indistinguishable from a component to the AST and has no JSX call sites, so
+  every one of its options came back `unused-component` — a statement about the
+  walk rather than about the hook. Only discovery is narrowed: a prop passing
+  through a hook on its way down is still traced, and still reported at the
+  component that declares it
+- The text output keeps its header on an empty report, so the tsconfig and the
+  Program's file count are visible in the case where they are most worth
+  checking
+
 ## 2.1.0
 
 - The `typescript` peer dependency is now marked optional. prop-flow never

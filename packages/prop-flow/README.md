@@ -67,6 +67,36 @@ justified         Button.title
    → genuinely sometimes-absent. The `?` is correct.
 ```
 
+## Batching over files
+
+Under `--json` an invocation **that names a file** always emits exactly one
+object on **stdout** — a report, or `{"error": "…"}` for a handled failure. So
+a loop over the files you changed stays parsable even where one of them fails,
+and the whole batch goes through a single `jq`:
+
+```bash
+$ for f in $CHANGED_TSX; do prop-flow "$f" --json; done | jq -s '
+    [ .[] | select(.error | not) | .props[]
+      | select(.verdict == "caller-dead" or .verdict == "unnecessary-optional"
+               or .verdict == "manual" or .constant != null) ]'
+```
+
+An empty array means nothing was found — not that a filter missed it. Do not
+filter the *text* output instead: the verdict labels are deliberately mixed
+case (`justified` reads quietly, `CALLER-DEAD` does not), so a grep anchored on
+one case silently drops the other, and an empty result then means either
+"nothing found" or "wrong pattern".
+
+Each invocation builds its own Program, which is the bulk of the runtime (~6 s
+on a 4 000-file monorepo). So batch by *file* — passing a `propName` saves
+nothing, and re-running a file to reformat its output costs a second Program.
+Capture once.
+
+The one thing `--json` does not wrap is the usage text: `--help`, and exit `1`
+for an invocation with no file at all, print it plain. Both are answers to a
+person rather than to a pipeline — and a loop that passes a file every time
+cannot reach either.
+
 ## Verdicts
 
 | verdict                | meaning                                                                  |
@@ -79,7 +109,15 @@ justified         Button.title
 | `required`             | the prop has no `?` to judge — listed only for its constant value        |
 
 Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
-failure (message on stderr).
+failure (message on stderr, or `{"error": …}` on stdout under `--json`).
+
+Nothing to analyse is a **success**, not a failure: a file with no exported
+component — a route module, a props-less page — and a component whose props are
+all required both come back with an empty report and exit `0`. They are
+distinguishable: `components` is `0` in the first case. Exit `2` is reserved for
+what genuinely blocked the analysis (a missing file, no resolvable compiler, a
+tsconfig that does not span the file), so a loop over changed files can stop on
+a real failure without stopping on a page component.
 
 ## Constant values
 
@@ -191,3 +229,11 @@ Components are picked up from `export function C`, `export const C = …`
 `export { C }` at the bottom of the file. A component re-exported through a
 barrel is still found at its call sites, but must be inspected in the file that
 declares it.
+
+An exported `useX` taking an options object is skipped. It is indistinguishable
+from a component to the AST and has no JSX call sites, so every one of its
+options would come back `unused-component` — a statement about the walk, not
+about the hook. Only discovery is narrowed: a prop that passes *through* a hook
+on its way down is still traced, and still reported at the component that
+declares it. The `use` prefix is the one naming convention safe to key on;
+lower-cased components are rare but legal, so PascalCase is not.
