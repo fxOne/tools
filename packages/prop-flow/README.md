@@ -69,10 +69,10 @@ justified         Button.title
 
 ## Batching over files
 
-Under `--json` every terminating outcome is exactly one object on **stdout** —
-a report, or `{"error": "…"}` for a handled failure. So a loop over the files
-you changed stays parsable even where one of them fails, and the whole batch
-goes through a single `jq`:
+Under `--json` an invocation **that names a file** always emits exactly one
+object on **stdout** — a report, or `{"error": "…"}` for a handled failure. So
+a loop over the files you changed stays parsable even where one of them fails,
+and the whole batch goes through a single `jq`:
 
 ```bash
 $ for f in $CHANGED_TSX; do prop-flow "$f" --json; done | jq -s '
@@ -91,6 +91,11 @@ Each invocation builds its own Program, which is the bulk of the runtime (~6 s
 on a 4 000-file monorepo). So batch by *file* — passing a `propName` saves
 nothing, and re-running a file to reformat its output costs a second Program.
 Capture once.
+
+The one thing `--json` does not wrap is the usage text: `--help`, and exit `1`
+for an invocation with no file at all, print it plain. Both are answers to a
+person rather than to a pipeline — and a loop that passes a file every time
+cannot reach either.
 
 ## Verdicts
 

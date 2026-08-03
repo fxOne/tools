@@ -38,25 +38,7 @@ export interface AnalyseOptions {
 export function analyseProps(options: AnalyseOptions): Report {
   const cwd = options.cwd ?? process.cwd();
   const ts = options.ts ?? loadTypeScript(cwd);
-
-  const file = isAbsolute(options.file) ? options.file : resolve(cwd, options.file);
-  if (!existsSync(file)) {
-    throw new PropFlowError(`File not found: ${file}`);
-  }
-
-  const configPath = options.tsconfig ? resolve(cwd, options.tsconfig) : discoverTsconfig(ts, file);
-  if (!configPath || !existsSync(configPath)) {
-    throw new PropFlowError('No tsconfig found. Pass one explicitly with --tsconfig <path>.');
-  }
-
-  const parsed = readTsConfig(ts, configPath, cwd);
-  const program = ts.createProgram({ options: parsed.options, rootNames: parsed.fileNames });
-  const sourceFile = findSourceFile(program, file);
-  if (!sourceFile) {
-    throw new PropFlowError(
-      `The chosen tsconfig (${relativeTo(cwd, configPath)}) does not include ${relativeTo(cwd, file)}.\nPass the solution/root tsconfig with --tsconfig so the file and its call sites are both in scope.`,
-    );
-  }
+  const { configPath, file, program, sourceFile } = resolveTarget(options, cwd, ts);
 
   const analyzer = createAnalyzer({ cwd, program, ts });
   // No component is not a failure — it is the answer for a route module or a
@@ -80,16 +62,15 @@ export function analyseProps(options: AnalyseOptions): Report {
       // A prop with no `?` has nothing for the verdicts to say: `justified` and
       // `caller-dead` are impossible on it and `unnecessary-optional` is a lie.
       // Its constant value is the whole reason it is here — no value, no row.
-      if (!prop.optional && analysis.constant === null) {
-        continue;
+      if (prop.optional || analysis.constant !== null) {
+        props.push({
+          ...analysis,
+          component: component.name,
+          hasDefault: prop.hasDefault,
+          prop: prop.name,
+          verdict: prop.optional ? analysis.verdict : 'required',
+        });
       }
-      props.push({
-        ...analysis,
-        component: component.name,
-        hasDefault: prop.hasDefault,
-        prop: prop.name,
-        verdict: prop.optional ? analysis.verdict : 'required',
-      });
     }
   }
 
@@ -105,6 +86,44 @@ export function analyseProps(options: AnalyseOptions): Report {
     file: relativeTo(cwd, file),
     fileCount: program.getSourceFiles().length,
   };
+}
+
+/** The file to analyse, the config it was found under, and the Program both live in. */
+interface Target {
+  readonly configPath: string;
+  /** Absolute; the report shortens it against `cwd` on the way out. */
+  readonly file: string;
+  readonly program: TS.Program;
+  readonly sourceFile: TS.SourceFile;
+}
+
+/**
+ * Resolve what the analysis runs against. Every way this can fail is a
+ * `PropFlowError`, and deliberately so: exit 2 is reserved for what actually
+ * blocked the analysis, and a missing file, an unfindable compiler config and a
+ * tsconfig that does not span the file are the three things that do.
+ */
+function resolveTarget(options: AnalyseOptions, cwd: string, ts: TypeScriptApi): Target {
+  const file = isAbsolute(options.file) ? options.file : resolve(cwd, options.file);
+  if (!existsSync(file)) {
+    throw new PropFlowError(`File not found: ${file}`);
+  }
+
+  const configPath = options.tsconfig ? resolve(cwd, options.tsconfig) : discoverTsconfig(ts, file);
+  if (!configPath || !existsSync(configPath)) {
+    throw new PropFlowError('No tsconfig found. Pass one explicitly with --tsconfig <path>.');
+  }
+
+  const parsed = readTsConfig(ts, configPath, cwd);
+  const program = ts.createProgram({ options: parsed.options, rootNames: parsed.fileNames });
+  const sourceFile = findSourceFile(program, file);
+  if (!sourceFile) {
+    throw new PropFlowError(
+      `The chosen tsconfig (${relativeTo(cwd, configPath)}) does not include ${relativeTo(cwd, file)}.\nPass the solution/root tsconfig with --tsconfig so the file and its call sites are both in scope.`,
+    );
+  }
+
+  return { configPath, file, program, sourceFile };
 }
 
 /** `getSourceFile` is exact-match; fall back to comparing resolved paths. */

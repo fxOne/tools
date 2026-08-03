@@ -19,11 +19,14 @@ This project adheres to [Semantic Versioning](http://semver.org/).
   two empty reports apart: no component to look at (`0`), versus a component
   whose props are all required
 - **BREAKING CHANGE**: under `--json` a handled failure is now a `{"error": …}`
-  object on **stdout** instead of a line on stderr, so every invocation emits
-  exactly one JSON object whatever happens. A `for f in …; do prop-flow "$f"
-  --json; done | jq -s` no longer breaks on the whole stream because one file
-  failed. `--json` is read off the raw argv, so a bad argument reaches the
-  envelope too. Without `--json` the stderr line is unchanged
+  object on **stdout** instead of a line on stderr, so an invocation that names
+  a file emits exactly one JSON object whatever happens. A `for f in …; do
+  prop-flow "$f" --json; done | jq -s` no longer breaks on the whole stream
+  because one file failed. `--json` is read off the raw argv, so a bad argument
+  reaches the envelope too. Without `--json` the stderr line is unchanged.
+  Usage output is deliberately left outside the envelope: `--help`, and exit `1`
+  for an invocation with no file, still print plain text — both answer a person,
+  and neither is reachable from a loop that passes a file every time
 - An exported `useX` taking an options object is no longer reported. It is
   indistinguishable from a component to the AST and has no JSX call sites, so
   every one of its options came back `unused-component` — a statement about the

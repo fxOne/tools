@@ -39,13 +39,19 @@ describe('analyseProps', () => {
     expect(report).toMatchObject({ components: 0, file: 'app.tsx', props: [] });
   });
 
-  it('leaves hooks out of discovery', () => {
+  it('leaves hooks out of discovery, and counts what is left', () => {
     // `useFilter({ initial })` is shaped like a component and has no JSX call
-    // sites, so every option of it would come back `unused-component`.
+    // sites, so every option of it would come back `unused-component`. What is
+    // narrowed is the `use` + capital shape, not everything spelled `use…`:
+    // `used` is a component and stays one, and `components` counts the two that
+    // survive rather than reducing to "found something".
     const report = analyse('hooks.tsx');
 
-    expect(report.components).toBe(1);
-    expect(verdicts(report)).toEqual({ 'FilterChip.label': 'unused-component' });
+    expect(report.components).toBe(2);
+    expect(verdicts(report)).toEqual({
+      'FilterChip.label': 'unused-component',
+      'used.tone': 'unused-component',
+    });
   });
 
   it('narrows to a single prop when one is named', () => {

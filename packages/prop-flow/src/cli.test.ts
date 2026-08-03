@@ -117,6 +117,23 @@ describe('runCli', () => {
     expect(stdout).toContain('Usage: prop-flow <file>');
   });
 
+  it('keeps usage human-readable under --json', () => {
+    // The one outcome that is not a JSON object: usage is an answer to a person
+    // who asked nothing analysable, and exit 1 is unreachable from a loop that
+    // passes a file every time. Wrapping it would make the text an escaped
+    // string in a field nobody reads.
+    const noFile = run(['--json']);
+    const help = run(['--json', '--help']);
+
+    expect(noFile.code).toBe(1);
+    expect(noFile.stdout).toContain('Usage: prop-flow <file>');
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain('Usage: prop-flow <file>');
+    expect(() => {
+      JSON.parse(help.stdout);
+    }).toThrow();
+  });
+
   it.each([
     [['--nope', 'button.tsx'], 'prop-flow: Unknown option: --nope\n'],
     [['missing.tsx'], 'prop-flow: File not found: '],

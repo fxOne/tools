@@ -35,8 +35,9 @@ export const USAGE =
  * (usage printed), 2 a handled failure.
  */
 export function runCli(argv: readonly string[], context: CliContext): number {
-  // Read off the raw argv rather than off the parsed args, so the JSON envelope
-  // also covers a failure to parse the arguments themselves.
+  // One read of the flag, and off the raw argv rather than off the parsed args:
+  // the envelope has to cover a failure to parse the arguments themselves, and
+  // at that point there are no parsed args left to ask.
   const json = argv.includes('--json');
   try {
     const args = parseArgs(argv);
@@ -52,7 +53,7 @@ export function runCli(argv: readonly string[], context: CliContext): number {
       ts: context.ts,
       tsconfig: args.tsconfig,
     });
-    context.stdout.write(args.json ? formatJson(report) : formatText(report));
+    context.stdout.write(json ? formatJson(report) : formatText(report));
     return 0;
   } catch (error) {
     if (error instanceof PropFlowError) {
