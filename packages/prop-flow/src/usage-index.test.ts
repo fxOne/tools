@@ -85,7 +85,21 @@ describe('createUsageIndex', () => {
     // `export { Aliased as Public }`, rendered as <Public/> in app.tsx. Without
     // alias resolution this would be a second entry nothing ever asks about,
     // and Aliased would look like it had no call sites at all.
-    expect(index.usagesOf(symbolOf('late.tsx', 'Aliased')).map(describeUsage)).toEqual(['Public@27']);
+    expect(index.usagesOf(symbolOf('late.tsx', 'Aliased')).map(describeUsage)).toEqual(['Public@28']);
+  });
+
+  it('files a usage under the function a wrapper call names, not under the binding', () => {
+    // `export const Chrome = memo(ChromeComponent)`: JSX renders `Chrome`,
+    // while a pass-through climbing out of the function body arrives at
+    // `ChromeComponent`. Both have to reach the same entry, or the climb ends
+    // on an empty usage list and the prop below it reads as caller-dead.
+    const wrapped = ['Chrome@38', 'Chrome@39'];
+    const binding = symbolOf('wrapped.tsx', 'Chrome');
+    const inner = symbolOf('wrapped.tsx', 'ChromeComponent');
+
+    expect(index.usagesOf(binding).map(describeUsage)).toEqual(wrapped);
+    expect(index.usagesOf(inner).map(describeUsage)).toEqual(wrapped);
+    expect(index.symbolId(binding)).toBe(index.symbolId(inner));
   });
 
   it('reports no usages for a component the Program never renders', () => {

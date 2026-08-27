@@ -5,11 +5,34 @@ import {
   bindingNameOfFn,
   defaultedBindings,
   findAttr,
+  fnOfDeclaration,
   isComponentFn,
   isExported,
   unwrapToFn,
 } from './ast.js';
 import type { ComponentFn } from './ast.js';
+
+/**
+ * The checker's job, faked over one parsed file: a name maps to the top-level
+ * function or variable that declares it. These fixtures are parsed, not
+ * compiled, so there is no checker to ask.
+ */
+function topLevelDeclaration(id: ts.Identifier): ts.Declaration | null {
+  for (const statement of id.getSourceFile().statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === id.text) {
+      return statement;
+    }
+    if (ts.isVariableStatement(statement)) {
+      const declared = statement.declarationList.declarations.find(
+        (decl) => ts.isIdentifier(decl.name) && decl.name.text === id.text,
+      );
+      if (declared) {
+        return declared;
+      }
+    }
+  }
+  return null;
+}
 
 function parse(code: string, setParentNodes = true): ts.SourceFile {
   return ts.createSourceFile('fixture.tsx', code, ts.ScriptTarget.ES2023, setParentNodes, ts.ScriptKind.TSX);
@@ -89,6 +112,42 @@ describe('unwrapToFn', () => {
 
   it.each([['const C = memo();'], ['const C = somethingElse;']])('gives up on %s', (code) => {
     expect(unwrapToFn(ts, initializerOf(code))).toBeNull();
+  });
+
+  it.each([
+    ['const C = memo(Inner); function Inner(p: P) {}', ts.SyntaxKind.FunctionDeclaration],
+    ['const C = memo(Inner); const Inner = memo((p: P) => null);', ts.SyntaxKind.ArrowFunction],
+  ])('follows a wrapped name into what it declares in %s', (code, kind) => {
+    expect(unwrapToFn(ts, initializerOf(code), topLevelDeclaration)?.kind).toBe(kind);
+  });
+
+  it('follows a name only when handed something to resolve it with', () => {
+    // Without a resolver this is where the peel stops — which is the whole
+    // reason a wrapped-by-name component used to be invisible.
+    expect(unwrapToFn(ts, initializerOf('const C = memo(Inner); function Inner(p: P) {}'))).toBeNull();
+  });
+
+  it('gives up on names that resolve back to each other', () => {
+    // Not runnable code, but it parses — and half-written files are exactly
+    // what this tool gets pointed at.
+    expect(unwrapToFn(ts, initializerOf('const A = B; const B = A;'), topLevelDeclaration)).toBeNull();
+  });
+});
+
+describe('fnOfDeclaration', () => {
+  it('reads the function a declaration is, or the one its initializer holds', () => {
+    expect(fnOfDeclaration(ts, findNode('function C(p: P) {}', ts.isFunctionDeclaration))?.kind).toBe(
+      ts.SyntaxKind.FunctionDeclaration,
+    );
+    expect(fnOfDeclaration(ts, findNode('const C = (p: P) => null;', ts.isVariableDeclaration))?.kind).toBe(
+      ts.SyntaxKind.ArrowFunction,
+    );
+  });
+
+  it('has nothing to read from a missing declaration or one holding no function', () => {
+    expect(fnOfDeclaration(ts, null)).toBeNull();
+    expect(fnOfDeclaration(ts, findNode('const C = 1;', ts.isVariableDeclaration))).toBeNull();
+    expect(fnOfDeclaration(ts, findNode('class C { render(p: P) {} }', ts.isClassDeclaration))).toBeNull();
   });
 });
 

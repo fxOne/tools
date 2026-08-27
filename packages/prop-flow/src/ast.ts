@@ -23,14 +23,69 @@ export function isComponentFn(ts: TypeScriptApi, node: TS.Node): node is Compone
   return ts.isArrowFunction(node) || ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node);
 }
 
-/** Peel memo()/forwardRef()/React.memo() wrappers down to the inner function. */
-export function unwrapToFn(ts: TypeScriptApi, expr: TS.Expression): ComponentFn | null {
+/**
+ * How an identifier is resolved to what it declares. Optional wherever it is
+ * taken: the AST alone cannot follow a name, so a plain parse hands none.
+ */
+export type DeclarationResolver = (id: TS.Identifier) => TS.Declaration | null;
+
+/**
+ * Peel memo()/forwardRef()/React.memo() wrappers down to the inner function.
+ * Given a resolver, a wrapper argument that merely NAMES the function is
+ * followed too: `export const Card = memo(CardComponent)` is the shape a
+ * wrapped component takes as soon as it outgrows being written inline, and
+ * stopping at the identifier leaves the component undiscoverable.
+ */
+export function unwrapToFn(ts: TypeScriptApi, expr: TS.Expression, resolve?: DeclarationResolver): ComponentFn | null {
+  return peel(ts, expr, resolve, new Set());
+}
+
+/** The component function a declaration IS, or that its initializer peels to. */
+export function fnOfDeclaration(
+  ts: TypeScriptApi,
+  declaration: TS.Declaration | null | undefined,
+  resolve?: DeclarationResolver,
+): ComponentFn | null {
+  return declaration ? fnOfDecl(ts, declaration, resolve, new Set()) : null;
+}
+
+function peel(
+  ts: TypeScriptApi,
+  expr: TS.Expression,
+  resolve: DeclarationResolver | undefined,
+  seen: Set<TS.Declaration>,
+): ComponentFn | null {
   if (ts.isArrowFunction(expr) || ts.isFunctionExpression(expr)) {
     return expr;
   }
   if (ts.isCallExpression(expr)) {
     const first = expr.arguments[0];
-    return first ? unwrapToFn(ts, first) : null;
+    return first ? peel(ts, first, resolve, seen) : null;
+  }
+  if (!resolve || !ts.isIdentifier(expr)) {
+    return null;
+  }
+  const declaration = resolve(expr);
+  // `const A = B, B = A` never runs, but it parses — and half-written code is
+  // exactly what this tool gets pointed at.
+  if (!declaration || seen.has(declaration)) {
+    return null;
+  }
+  seen.add(declaration);
+  return fnOfDecl(ts, declaration, resolve, seen);
+}
+
+function fnOfDecl(
+  ts: TypeScriptApi,
+  declaration: TS.Declaration,
+  resolve: DeclarationResolver | undefined,
+  seen: Set<TS.Declaration>,
+): ComponentFn | null {
+  if (ts.isFunctionDeclaration(declaration)) {
+    return declaration;
+  }
+  if (ts.isVariableDeclaration(declaration) && declaration.initializer) {
+    return peel(ts, declaration.initializer, resolve, seen);
   }
   return null;
 }

@@ -16,9 +16,14 @@ export interface UsageIndex {
    */
   isCalled(sym: TS.Symbol): boolean;
   /**
-   * A stable number for `sym`. Symbols are objects, so a Map would key on them
-   * directly — the id exists because it is printable, which the caches and the
-   * cycle guard built on top of it both want.
+   * A stable number for the component `sym` names. Symbols are objects, so a
+   * Map would key on them directly — the id exists because it is printable,
+   * which the caches and the cycle guard built on top of it both want.
+   *
+   * Two names for ONE component share an id: `export const Card =
+   * memo(CardComponent)` is rendered as `Card` and climbed into as
+   * `CardComponent`, and a walk that filed those apart would find no call site
+   * on the way up — a live prop reported `caller-dead`.
    */
   symbolId(sym: TS.Symbol): number;
   /** Every JSX element rendering `sym`, in Program order. */
@@ -26,18 +31,24 @@ export interface UsageIndex {
 }
 
 /**
- * Every JSX usage in the Program, indexed in one walk: component symbol → call
- * sites, plus the symbols that are CALLED rather than rendered. Building this
+ * Every JSX usage in the Program, indexed in one walk: component → call sites,
+ * plus the components that are CALLED rather than rendered. Building this
  * eagerly costs one traversal and saves one per prop analysed.
  *
- * Import aliases are resolved on the way in, so `<Public/>` and the `Aliased`
- * it was exported as land on the same entry.
+ * Both ways a component can wear a second name are resolved on the way in:
+ * `<Public/>` and the `Aliased` it was exported as land on the same entry, and
+ * so do `<Card/>` and the function its `memo()` wraps.
  */
 export function createUsageIndex({ checker, components, program, ts }: UsageIndexOptions): UsageIndex {
-  // Symbols are not primitives, so a WeakMap keyed by symbol is the identity
-  // map; the id it hands out is what everything downstream keys on.
-  const symbolIds = new WeakMap<TS.Symbol, number>();
-  let nextSymbolId = 1;
+  // Neither symbols nor functions are primitives, so a WeakMap keyed by the
+  // thing itself is the identity map; the id it hands out is what everything
+  // downstream keys on. One map for both kinds of key, so that one counter
+  // cannot hand the same number to a symbol and to a function.
+  const ids = new WeakMap<object, number>();
+  let nextId = 1;
+  // What each symbol resolved to, memoised: `symbolId` runs on every JSX tag
+  // and every callee in the Program, and peeling a wrapper is not free.
+  const keys = new WeakMap<TS.Symbol, object>();
 
   const calledIds = new Set<number>();
   const usagesById = new Map<number, TS.JsxOpeningLikeElement[]>();
@@ -60,11 +71,32 @@ export function createUsageIndex({ checker, components, program, ts }: UsageInde
   }
 
   function symbolId(sym: TS.Symbol): number {
-    let id = symbolIds.get(sym);
+    return idOf(keyOf(sym));
+  }
+
+  /**
+   * What a symbol's usages are filed under: the component function it names,
+   * so a wrapper binding and the function inside it meet on one entry. A symbol
+   * naming no function — an intrinsic-like tag, a namespace member — keys on
+   * itself, which is the identity it had before.
+   */
+  function keyOf(sym: TS.Symbol): object {
+    const known = keys.get(sym);
+    if (known) {
+      return known;
+    }
+    const resolved = components.resolveAlias(sym);
+    const key: object = components.fnOfSymbol(resolved) ?? resolved;
+    keys.set(sym, key);
+    return key;
+  }
+
+  function idOf(key: object): number {
+    let id = ids.get(key);
     if (id === undefined) {
-      id = nextSymbolId;
-      nextSymbolId += 1;
-      symbolIds.set(sym, id);
+      id = nextId;
+      nextId += 1;
+      ids.set(key, id);
     }
     return id;
   }
@@ -84,7 +116,7 @@ export function createUsageIndex({ checker, components, program, ts }: UsageInde
     if (!sym) {
       return;
     }
-    const id = symbolId(components.resolveAlias(sym));
+    const id = symbolId(sym);
     const list = usagesById.get(id) ?? [];
     list.push(node);
     usagesById.set(id, list);
@@ -93,7 +125,7 @@ export function createUsageIndex({ checker, components, program, ts }: UsageInde
   function recordCall(node: TS.CallExpression): void {
     const sym = checker.getSymbolAtLocation(node.expression);
     if (sym) {
-      calledIds.add(symbolId(components.resolveAlias(sym)));
+      calledIds.add(symbolId(sym));
     }
   }
 }
