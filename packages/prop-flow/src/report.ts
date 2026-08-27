@@ -78,8 +78,13 @@ export function hint(row: PropReport): string {
       return '   → no caller ever passes it; it is always `undefined` inside. Remove the prop and the code that reads it.\n';
     case 'justified':
       return '   → genuinely sometimes-absent. The `?` is correct.\n';
-    case 'manual':
+    case 'manual': {
+      const silent = row.sites.filter((site) => site.kind === 'silent');
+      if (silent.length > 0) {
+        return silentHint(silent);
+      }
       return '   → an unreadable spread or a contested override blocks a static verdict. Check the MANUAL sites by hand.\n';
+    }
     case 'unused-component':
       return '   → the component has no call sites in this Program. Verify the tsconfig spans its callers.\n';
     // `required` and `cycle` have no advice of their own: what puts a required
@@ -87,6 +92,20 @@ export function hint(row: PropReport): string {
     default:
       return '';
   }
+}
+
+/**
+ * What is left of a `caller-dead` that a silent pass-through pulled back. The
+ * counts still read "nobody passes it", so the line has to say why that is not
+ * the conclusion — and name the pass-through, which is the only place a caller
+ * this walk cannot see could be hiding.
+ */
+function silentHint(silent: readonly Site[]): string {
+  const traces = [...new Set(silent.map((site) => site.via ?? '?'))].join(', ');
+  return (
+    `   → every readable caller omits it, but ${traces} contributed nothing — its own call sites are\n` +
+    '     invisible here. Check them before removing the prop.\n'
+  );
 }
 
 /**

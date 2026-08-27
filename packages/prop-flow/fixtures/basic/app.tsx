@@ -9,6 +9,7 @@ import { Panel } from './panel';
 import { Renamed } from './renamed';
 import { Rest } from './rest';
 import { Tree } from './tree';
+import { Chrome, Remote, Stripe } from './wrapped';
 
 const badgeProps: BadgeProps = { text: 'spread', tone: 'info' };
 
@@ -34,6 +35,12 @@ export function App() {
       <Ghost label={undefined} />
       <Ghost label={undefined} />
       <Badge {...badgeProps} />
+      <Chrome highlight />
+      <Chrome />
+      {/* The omission that makes Stripe.loud caller-dead as long as the walk
+          cannot see through <Chrome/> to the function it wraps. */}
+      <Stripe />
+      <Remote tint="cross-file" />
     </main>
   );
 }

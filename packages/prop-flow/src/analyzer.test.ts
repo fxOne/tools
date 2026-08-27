@@ -61,6 +61,9 @@ describe('createAnalyzer', () => {
     ['button.tsx', 'Button', 'size', 'unnecessary-optional'],
     ['button.tsx', 'Button', 'title', 'justified'],
     ['card.tsx', 'Card', 'action', 'justified'],
+    ['children.tsx', 'Relayed', 'children', 'justified'],
+    ['children.tsx', 'Shell', 'children', 'unnecessary-optional'],
+    ['children.tsx', 'Slot', 'children', 'justified'],
     ['dialog.tsx', 'Dialog', 'caption', 'justified'],
     ['frame.tsx', 'Frame', 'caption', 'justified'],
     ['frame.tsx', 'Frame', 'tone', 'caller-dead'],
@@ -71,10 +74,16 @@ describe('createAnalyzer', () => {
     ['panel.tsx', 'Panel', 'note', 'justified'],
     ['renamed.tsx', 'Renamed', 'caption', 'unnecessary-optional'],
     ['rest.tsx', 'Rest', 'extra', 'caller-dead'],
+    ['silent.tsx', 'Base', 'note', 'manual'],
+    ['silent.tsx', 'Loud', 'note', 'caller-dead'],
     ['sink.tsx', 'Sink', 'data', 'unnecessary-optional'],
     ['spread.tsx', 'Leaf', 'note', 'justified'],
     ['spread.tsx', 'Murky', 'note', 'manual'],
     ['tree.tsx', 'Tree', 'depth', 'unnecessary-optional'],
+    ['wrapped.tsx', 'Chrome', 'highlight', 'justified'],
+    ['wrapped.tsx', 'Remote', 'tint', 'unnecessary-optional'],
+    ['wrapped.tsx', 'Stripe', 'loud', 'justified'],
+    ['wrapped-impl.tsx', 'Tinted', 'shade', 'unnecessary-optional'],
   ])('%s: %s.%s → %s', (file, component, prop, verdict) => {
     expect(analyse(file, component, prop).verdict).toBe(verdict);
   });
@@ -127,10 +136,14 @@ describe('createAnalyzer', () => {
       'passthrough ListConst.note',
       'passthrough Multi.note',
       'passthrough Override.note',
-      // Never rendered and never called — the site below it is dead code.
-      'passthrough Unrendered.note',
       'real string literal',
+      // Never rendered and never called — the site below it is dead code, so
+      // the subtree is empty and the line says so. It does not pull the verdict
+      // back: five other sites pass the prop, and the downgrade only guards the
+      // one verdict whose advice is to delete something.
+      'silent Unrendered.note',
     ]);
+    expect(result.verdict).toBe('justified');
   });
 
   it('keeps the three spread shapes it must not resolve MANUAL', () => {
@@ -243,11 +256,96 @@ describe('createAnalyzer', () => {
     ]);
   });
 
+  it('reads `children` off the nesting, which no attribute carries', () => {
+    // The prop whose value is written between the tags rather than in the
+    // attributes. Read attributes alone and every nesting looks like an
+    // omission — on `children`, of all props, that ends in "nobody passes it".
+    const result = analyse('children.tsx', 'Slot', 'children');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 6, real: 8 });
+    expect(tally(result.sites)).toEqual({
+      // Self-closing, `<C></C>`, whitespace between the tags, and a lone
+      // comment — four ways to nest nothing at all.
+      'omit': 4,
+      'omit explicit undefined': 1,
+      // Forwarded by nesting: a pass-through like any other.
+      'passthrough Relayed.children': 1,
+      // An attribute is still read wherever nothing is nested.
+      'real JsxSelfClosingElement': 1,
+      // An element, text, several children at once, `children={…}` beaten by a
+      // nesting, and the spread that the nesting beats too.
+      'real nested children': 5,
+      // A lone `{expr}` is the one nesting whose value can be read.
+      'real string literal': 1,
+    });
+  });
+
+  it('lets a nesting beat a spread that would otherwise carry children', () => {
+    // <Slot {...props}><b/></Slot>. The spread's type has `children`, so
+    // without the nesting this resolves to a pass-through of Shell's own — the
+    // nesting is what actually arrives, and it originates right here.
+    const result = analyse('children.tsx', 'Shell', 'children');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 0, real: 1 });
+    expect(result.sites.map(describeSite)).toEqual(['real nested children']);
+  });
+
+  it('climbs out of a function its export wraps by name', () => {
+    // `export const Chrome = memo(ChromeComponent)`. The climb out of
+    // <Stripe loud={highlight}/> lands on ChromeComponent, whose call sites are
+    // written as <Chrome/> — a different symbol. Filed apart, the pass-through
+    // contributes nothing, the lone <Stripe/> in app.tsx is all that is left,
+    // and a prop that IS passed comes back caller-dead: "delete it" on live code.
+    const result = analyse('wrapped.tsx', 'Stripe', 'loud');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 2, real: 1, verdict: 'justified' });
+    // The <Chrome/> pass and the <Chrome/> omission are both counted through
+    // the one pass-through line, as every expanded subtree is; the second omit
+    // is the direct <Stripe/>. Reported under the name that declares the prop,
+    // not under the binding the wrapper call was assigned to.
+    expect(result.sites.map(describeSite).sort()).toEqual(['omit', 'passthrough ChromeComponent.highlight']);
+  });
+
+  it('climbs out of a wrapped function that lives in another file', () => {
+    // `export const Remote = memo(RemoteImpl)` in wrapped.tsx, RemoteImpl in
+    // wrapped-impl.tsx. The climb out of <Tinted shade={tint}/> lands on
+    // RemoteImpl; every call site is a <Remote/> written elsewhere against the
+    // binding. Both halves of the fix have to hold at once — peel the wrapper
+    // AND follow the import alias — or this is a caller-dead again.
+    const result = analyse('wrapped-impl.tsx', 'Tinted', 'shade');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 0, real: 1 });
+    expect(result.sites.map(describeSite)).toEqual(['passthrough RemoteImpl.tint']);
+  });
+
+  it('pulls a caller-dead back to manual when a pass-through said nothing', () => {
+    // Two direct omissions and one climb into <Relayed/>, which is rendered
+    // nowhere — so the subtree moves no counter and the counts read "nobody
+    // passes it" on the strength of a hole. `caller-dead` is the one verdict
+    // whose advice is destructive, so it is the one an empty subtree must not
+    // be allowed to reach.
+    const result = analyse('silent.tsx', 'Base', 'note');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 2, real: 0, verdict: 'manual' });
+    // The counts are untouched — only the verdict moves. What the row gains is
+    // the line naming where a caller could still be hiding.
+    expect(result.sites.map(describeSite).sort()).toEqual(['omit', 'omit', 'silent Relayed.note']);
+    expect(result.sites.find(({ kind }) => kind === 'silent')?.note).toBe('contributed nothing');
+  });
+
+  it('leaves a caller-dead alone when every site bottoms out directly', () => {
+    // The same file, the same two-omission shape, no pass-through anywhere:
+    // the guard must not cost the verdict its usual case.
+    expect(analyse('silent.tsx', 'Loud', 'note')).toMatchObject({ omit: 2, real: 0, verdict: 'caller-dead' });
+  });
+
   it('terminates on a self-recursive component instead of looping', () => {
     const result = analyse('tree.tsx', 'Tree', 'depth');
 
     // The self-recursive call site is a pass-through back into Tree.depth: it
-    // is reported, but the repeat visit contributes no counts.
+    // is reported, but the repeat visit contributes no counts. Moving no
+    // counter is what a silence looks like, and this is not one — the first
+    // visit already counted the subtree, so the line stays a plain pass-through.
     expect(result).toMatchObject({ ambiguous: 0, omit: 0, real: 1 });
     expect(result.sites.map(({ kind }) => kind).sort()).toEqual(['passthrough', 'real']);
     expect(result.sites.find(({ kind }) => kind === 'passthrough')?.via).toBe('Tree.depth');
@@ -257,6 +355,16 @@ describe('createAnalyzer', () => {
     expect(analyzer.findComponents(sourceFile('button.tsx')).map(({ name }) => name)).toEqual(['Button']);
     // memo()-wrapped arrow, assigned to an exported const.
     expect(analyzer.findComponents(sourceFile('panel.tsx')).map(({ name }) => name)).toEqual(['Panel']);
+    // The same wrapper over a function the call only NAMES: stopping at the
+    // identifier leaves the file looking like it exports no component at all.
+    // `Missing` and `Typed` wrap a name that resolves to nothing and one that
+    // resolves to a type — following a name must not invent a component either.
+    expect(analyzer.findComponents(sourceFile('wrapped.tsx')).map(({ name }) => name)).toEqual([
+      'Stripe',
+      'Chrome',
+      // Wrapped by a name that is an import: the alias resolves before the peel.
+      'Remote',
+    ]);
     // Exported at the bottom of the file — reported under their declared name.
     expect(analyzer.findComponents(sourceFile('late.tsx')).map(({ name }) => name)).toEqual(['Aliased', 'Late']);
     // App takes no props, so there is nothing to analyse in it.

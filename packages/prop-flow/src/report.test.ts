@@ -137,6 +137,38 @@ describe('hint', () => {
   ])('%s (hasDefault=%s) advises %s', (verdict, hasDefault, expected) => {
     expect(hint(makeRow({ hasDefault, verdict }))).toContain(expected);
   });
+
+  it('names the pass-through behind a manual that was a caller-dead', () => {
+    // The counts still read "nobody passes it", so the line has to say why
+    // that is not the conclusion — and where the unseen caller could be.
+    const row = makeRow({
+      omit: 2,
+      real: 0,
+      sites: [
+        { kind: 'omit', loc: 'src/app.tsx:4:5' },
+        { kind: 'silent', loc: 'src/relay.tsx:9:7', note: 'contributed nothing', via: 'Relayed.note' },
+      ],
+      verdict: 'manual',
+    });
+
+    expect(hint(row)).toContain('Relayed.note contributed nothing');
+    expect(hint(row)).toContain('Check them before removing the prop');
+    // The generic manual advice would send the reader to sites that are not there.
+    expect(hint(row)).not.toContain('Check the MANUAL sites');
+  });
+
+  it('names each silent pass-through once', () => {
+    const row = makeRow({
+      sites: [
+        { kind: 'silent', loc: 'src/a.tsx:1:1', via: 'Relayed.note' },
+        { kind: 'silent', loc: 'src/b.tsx:2:2', via: 'Relayed.note' },
+        { kind: 'silent', loc: 'src/c.tsx:3:3', via: 'Other.note' },
+      ],
+      verdict: 'manual',
+    });
+
+    expect(hint(row)).toContain('Relayed.note, Other.note contributed nothing');
+  });
 });
 
 describe('constantHint', () => {

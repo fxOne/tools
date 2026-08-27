@@ -68,6 +68,15 @@ export function createClassifier({ checker, components, ts }: ClassifierOptions)
   // ── call site ─────────────────────────────────────────────────────────────
 
   function classifyElement(el: TS.JsxOpeningLikeElement, propName: string): Classification {
+    // Nesting is the one value that is not written in the attributes at all, so
+    // no amount of reading them can find it. It also wins over everything that
+    // IS written there — `<C children={x}>{y}</C>` passes `y`, and so does
+    // `<C {...props}>{y}</C>` — which is why it comes first and short-circuits.
+    const nested = propName === 'children' ? nestedChildren(el) : null;
+    if (nested) {
+      return nested;
+    }
+
     const { attr, spreadsAfter } = findAttr(ts, el, propName);
     const candidates = spreadsAfter
       .map((spread) => ({ carry: carryOf(spread, propName), spread }))
@@ -88,6 +97,47 @@ export function createClassifier({ checker, components, ts }: ClassifierOptions)
       return { kind: 'manual', note: 'an optional prop in a spread contests an earlier value' };
     }
     return classifySpread(winner.spread, propName);
+  }
+
+  /**
+   * What the element nests, as a value for `children` — or null when it nests
+   * nothing, which is when the attributes get their turn. A self-closing tag
+   * nests nothing by construction, and so does `<C></C>`.
+   */
+  function nestedChildren(el: TS.JsxOpeningLikeElement): Classification | null {
+    if (!ts.isJsxOpeningElement(el) || !ts.isJsxElement(el.parent)) {
+      return null;
+    }
+    const children = el.parent.children.filter((child) => reachesChildren(child));
+    const [only] = children;
+    if (only === undefined) {
+      return null;
+    }
+    // A lone `{expr}` is the one nesting whose value can be read — and the only
+    // one that can be a pass-through: `<Slot>{children}</Slot>` forwards a prop
+    // rather than originating anything. Everything else — text, an element, or
+    // several children at once — is a value made right here, and an array of
+    // them is not a value any constancy claim can be made about.
+    if (children.length === 1 && ts.isJsxExpression(only) && only.expression) {
+      return classifyExpression(only.expression);
+    }
+    return { kind: 'real', note: 'nested children', value: null };
+  }
+
+  /**
+   * Whether a JSX child reaches `children` at all. Whitespace between tags and
+   * a lone `{/* comment *\/}` are both dropped before the element is built, so
+   * neither is a value — treating them as one would report `<C>\n</C>` as
+   * passing something.
+   */
+  function reachesChildren(child: TS.JsxChild): boolean {
+    if (ts.isJsxText(child)) {
+      return !child.containsOnlyTriviaWhiteSpaces;
+    }
+    if (ts.isJsxExpression(child)) {
+      return child.expression !== undefined;
+    }
+    return true;
   }
 
   /** What `{...x}` can contribute to `propName`, judged by its type alone. */
