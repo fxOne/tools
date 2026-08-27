@@ -105,7 +105,7 @@ cannot reach either.
 | `unnecessary-optional` | every call site passes it → could be required                            |
 | `caller-dead`          | no call site passes it → optional and always `undefined`                 |
 | `unused-component`     | the component itself has no call sites in the Program                    |
-| `manual`               | an unreadable spread or a contested override blocks a static conclusion  |
+| `manual`               | an unreadable spread, a contested override, or a pass-through that came back empty, blocks a static conclusion |
 | `required`             | the prop has no `?` to judge — listed only for its constant value        |
 
 Exit codes: `0` success, `1` nothing to do (usage printed), `2` a handled
@@ -214,10 +214,32 @@ ARIA props behind `React.ComponentProps<'button'>`, say — are not reported. A
 verdict on them is true but useless: the `?` is not yours to drop, and they bury
 the props that are. A prop redeclared in your own type is still reported.
 
-A pass-through that climbs into a function which is *called* rather than
-rendered — a `renderX({ … })` test helper, typically — also stays `manual`: its
-callers exist but are invisible to a JSX walk, and counting them as zero would
-report a live prop as `caller-dead`.
+### When a pass-through comes back empty
+
+A pass-through whose subtree moved no counter at all is reported as a `silent`
+site rather than a `passthrough`. There are three reasons a subtree comes back
+empty, and only one of them is an answer:
+
+1. **The component really is dead** — nothing renders it, nothing calls it.
+   Contributing nothing is the honest result.
+2. **The component is *called* rather than rendered** — a `renderX({ … })` test
+   helper. Its callers exist but are invisible to a JSX walk, so the site is
+   `manual` on its own, before any verdict is formed.
+3. **The walk filed its call sites under a different key.** A bug, by
+   definition — and not one you can see from the output.
+
+(1) and (3) are indistinguishable, so `caller-dead` — the one verdict whose
+advice is destructive — is not allowed to rest on either. **A `caller-dead`
+with at least one `silent` site is reported `manual` instead**, and the hint
+names the pass-through to go and check. The counts are untouched: the row still
+reads `passes=0`, and what changed is only the conclusion drawn from it.
+
+The guard is scoped to `caller-dead` on purpose. Under `justified` or
+`unnecessary-optional` a silent pass-through changes nothing anyone acts on, so
+those verdicts stand as they are — the `silent` line is still printed, as
+evidence rather than as a downgrade. In practice most `caller-dead` rows bottom
+out in direct omissions and carry no pass-through at all, so the rule is a
+no-op on them.
 
 `prop={undefined}` counts as an omission — it is an omission dressed up as a
 pass, so a prop that is only ever fed `undefined` still comes out as

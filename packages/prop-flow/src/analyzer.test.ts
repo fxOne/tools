@@ -74,6 +74,8 @@ describe('createAnalyzer', () => {
     ['panel.tsx', 'Panel', 'note', 'justified'],
     ['renamed.tsx', 'Renamed', 'caption', 'unnecessary-optional'],
     ['rest.tsx', 'Rest', 'extra', 'caller-dead'],
+    ['silent.tsx', 'Base', 'note', 'manual'],
+    ['silent.tsx', 'Loud', 'note', 'caller-dead'],
     ['sink.tsx', 'Sink', 'data', 'unnecessary-optional'],
     ['spread.tsx', 'Leaf', 'note', 'justified'],
     ['spread.tsx', 'Murky', 'note', 'manual'],
@@ -134,10 +136,14 @@ describe('createAnalyzer', () => {
       'passthrough ListConst.note',
       'passthrough Multi.note',
       'passthrough Override.note',
-      // Never rendered and never called — the site below it is dead code.
-      'passthrough Unrendered.note',
       'real string literal',
+      // Never rendered and never called — the site below it is dead code, so
+      // the subtree is empty and the line says so. It does not pull the verdict
+      // back: five other sites pass the prop, and the downgrade only guards the
+      // one verdict whose advice is to delete something.
+      'silent Unrendered.note',
     ]);
+    expect(result.verdict).toBe('justified');
   });
 
   it('keeps the three spread shapes it must not resolve MANUAL', () => {
@@ -312,11 +318,34 @@ describe('createAnalyzer', () => {
     expect(result.sites.map(describeSite)).toEqual(['passthrough RemoteImpl.tint']);
   });
 
+  it('pulls a caller-dead back to manual when a pass-through said nothing', () => {
+    // Two direct omissions and one climb into <Relayed/>, which is rendered
+    // nowhere — so the subtree moves no counter and the counts read "nobody
+    // passes it" on the strength of a hole. `caller-dead` is the one verdict
+    // whose advice is destructive, so it is the one an empty subtree must not
+    // be allowed to reach.
+    const result = analyse('silent.tsx', 'Base', 'note');
+
+    expect(result).toMatchObject({ ambiguous: 0, omit: 2, real: 0, verdict: 'manual' });
+    // The counts are untouched — only the verdict moves. What the row gains is
+    // the line naming where a caller could still be hiding.
+    expect(result.sites.map(describeSite).sort()).toEqual(['omit', 'omit', 'silent Relayed.note']);
+    expect(result.sites.find(({ kind }) => kind === 'silent')?.note).toBe('contributed nothing');
+  });
+
+  it('leaves a caller-dead alone when every site bottoms out directly', () => {
+    // The same file, the same two-omission shape, no pass-through anywhere:
+    // the guard must not cost the verdict its usual case.
+    expect(analyse('silent.tsx', 'Loud', 'note')).toMatchObject({ omit: 2, real: 0, verdict: 'caller-dead' });
+  });
+
   it('terminates on a self-recursive component instead of looping', () => {
     const result = analyse('tree.tsx', 'Tree', 'depth');
 
     // The self-recursive call site is a pass-through back into Tree.depth: it
-    // is reported, but the repeat visit contributes no counts.
+    // is reported, but the repeat visit contributes no counts. Moving no
+    // counter is what a silence looks like, and this is not one — the first
+    // visit already counted the subtree, so the line stays a plain pass-through.
     expect(result).toMatchObject({ ambiguous: 0, omit: 0, real: 1 });
     expect(result.sites.map(({ kind }) => kind).sort()).toEqual(['passthrough', 'real']);
     expect(result.sites.find(({ kind }) => kind === 'passthrough')?.via).toBe('Tree.depth');

@@ -30,6 +30,13 @@ interface Contribution {
   /** A value that could not be read as a literal — no constancy is claimable. */
   readonly poisoned: boolean;
   readonly real: number;
+  /**
+   * `Component.prop` of every pass-through below here whose subtree moved no
+   * counter at all. Carried rather than derived from `sites`, because expanding
+   * a pass-through replaces the subtree's lines with one of its own — a deeper
+   * silence would be gone from the sites by the time the verdict is decided.
+   */
+  readonly silent: readonly string[];
   /** One line per call site, except where absorbing a default splits it up. */
   readonly sites: readonly Site[];
   readonly values: readonly string[];
@@ -44,6 +51,7 @@ interface Walk {
   readonly omit: number;
   readonly poisoned: boolean;
   readonly real: number;
+  readonly silent: readonly string[];
   readonly sites: readonly Site[];
   readonly values: ReadonlySet<string>;
   readonly verdict: Verdict;
@@ -84,8 +92,25 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
       omit: result.omit,
       real: result.real,
       sites: result.sites,
-      verdict: result.verdict,
+      verdict: downgraded(result),
     };
+  }
+
+  /**
+   * `caller-dead` is the one verdict whose advice is destructive — "no caller
+   * passes it, remove the prop" — so it is the one that must not be reached by
+   * accident. A subtree that contributed nothing is indistinguishable from a
+   * subtree that legitimately had nothing to contribute, and only the second
+   * may end here: the first is a call site the walk could not see, and acting
+   * on it deletes a live prop.
+   *
+   * Scoped to `caller-dead` on purpose. Under `justified` or
+   * `unnecessary-optional` a silent pass-through changes nothing anyone acts
+   * on, and downgrading those would throw away good verdicts to guard against a
+   * risk that only exists where the advice is "delete this".
+   */
+  function downgraded(result: Walk): Verdict {
+    return result.verdict === 'caller-dead' && result.silent.length > 0 ? 'manual' : result.verdict;
   }
 
   /** Every call site of `component`, merged into counts, sites and values. */
@@ -93,8 +118,19 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     const key = `${index.symbolId(component.symbol)}#${propName}`;
     if (visited.has(key)) {
       // A cycle in the pass-through graph. The first visit already counted
-      // this subtree, so the repeat contributes nothing.
-      return { ambiguous: 0, omit: 0, poisoned: false, real: 0, sites: [], values: new Set(), verdict: 'cycle' };
+      // this subtree, so the repeat contributes nothing — deliberately, which
+      // is what keeps it out of `silent`: the information is in the result
+      // already, just reached by the other branch.
+      return {
+        ambiguous: 0,
+        omit: 0,
+        poisoned: false,
+        real: 0,
+        silent: [],
+        sites: [],
+        values: new Set(),
+        verdict: 'cycle',
+      };
     }
     visited.add(key);
 
@@ -142,14 +178,16 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     const loc = locOf(el, cwd);
     const trace = `${via.name}.${viaProp}`;
     const fallback = defaultsOf(via).get(viaProp);
+    const silent = silentOf(sub, trace);
     if (sub.omit === 0 || fallback === undefined) {
       // No omission for the default to catch, or no default to catch it.
       return {
+        silent,
         ambiguous: sub.ambiguous,
         omit: sub.omit,
         poisoned: sub.poisoned,
         real: sub.real,
-        sites: [{ kind: 'passthrough', loc, via: trace }],
+        sites: [passthroughSite(loc, trace, silent)],
         values: [...sub.values],
       };
     }
@@ -163,6 +201,9 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
       .filter((site) => site.kind === 'omit')
       .map((site): Site => ({ kind: 'real', loc: site.loc, note: 'the default fires here', via: trace }));
     return {
+      // Absorbing a default means the subtree had omissions, so this line is
+      // never the silent one — it just carries a deeper silence past itself.
+      silent,
       ambiguous: sub.ambiguous,
       omit: 0,
       poisoned: sub.poisoned || value === null,
@@ -277,8 +318,46 @@ function leaf(counts: Counts, site: Site, value: string | null = null): Contribu
     omit: counts.omit ?? 0,
     poisoned: site.kind === 'real' && value === null,
     real: counts.real ?? 0,
+    // A leaf moves a counter by construction, so it is never a silence — and it
+    // has no subtree for one to arrive from.
+    silent: [],
     sites: [site],
     values: value === null ? [] : [value],
+  };
+}
+
+/**
+ * The pass-throughs under this call site that moved no counter at all. A
+ * subtree that came back empty IS one, and it stands in for whatever silence
+ * lies below it: the deeper traces are dropped rather than added, because this
+ * is the line the reader can actually go and look at.
+ */
+function silentOf(sub: Walk, trace: string): readonly string[] {
+  if (sub.verdict === 'cycle') {
+    // Not a silence. The first visit counted this subtree and the repeat is
+    // meant to add nothing — the information is in the result already.
+    return [];
+  }
+  return sub.ambiguous === 0 && sub.omit === 0 && sub.real === 0 ? [trace] : sub.silent;
+}
+
+/**
+ * The one line a pass-through contributes. A silent one is named apart because
+ * it is indistinguishable from a resolved one on the page: same shape, same
+ * trace, and nothing underneath to show for it.
+ */
+function passthroughSite(loc: string, trace: string, silent: readonly string[]): Site {
+  if (silent.length === 0) {
+    return { kind: 'passthrough', loc, via: trace };
+  }
+  // `via` already names this pass-through, so a note repeating it reads as two
+  // traces. Only a silence further down has something left to say.
+  const deeper = silent.filter((name) => name !== trace);
+  return {
+    loc,
+    kind: 'silent',
+    note: deeper.length > 0 ? `${deeper.join(', ')} contributed nothing` : 'contributed nothing',
+    via: trace,
   };
 }
 
@@ -289,6 +368,7 @@ function merge(contributions: readonly Contribution[]): Omit<Walk, 'verdict'> {
     omit: total(contributions, 'omit'),
     poisoned: contributions.some((contribution) => contribution.poisoned),
     real: total(contributions, 'real'),
+    silent: contributions.flatMap((contribution) => contribution.silent),
     sites: contributions.flatMap((contribution) => contribution.sites),
     values: new Set(contributions.flatMap((contribution) => contribution.values)),
   };

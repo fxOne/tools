@@ -7,7 +7,10 @@
  *   unused-component     the component itself has no call sites in the Program
  *   manual               an unreadable spread, a dynamic value or a contested
  *                        override blocks a static conclusion → listed for a
- *                        human to check
+ *                        human to check. Also where a `caller-dead` lands when
+ *                        a pass-through below it came back empty: the counts
+ *                        say "nobody passes it", but one of the sites they rest
+ *                        on said nothing at all
  *   cycle                the pass-through graph looped back on itself; the
  *                        repeat visit contributes no new information
  *   required             the prop has no `?` to judge — listed only because it
@@ -16,7 +19,13 @@
 export type Verdict =
   'caller-dead' | 'cycle' | 'justified' | 'manual' | 'required' | 'unnecessary-optional' | 'unused-component';
 
-export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real';
+/**
+ * `silent` is a `passthrough` whose subtree moved no counter at all. It is kept
+ * apart because it is the one site that says nothing while looking like it
+ * said something: the row below it is empty, and an empty subtree is
+ * indistinguishable from a subtree that legitimately had nothing to add.
+ */
+export type SiteKind = 'manual' | 'omit' | 'passthrough' | 'real' | 'silent';
 
 /** One JSX call site, classified. */
 export interface Site {
@@ -25,9 +34,10 @@ export interface Site {
   /** Why it was classified this way; a `passthrough` carries one only rarely. */
   readonly note?: string;
   /**
-   * `Component.prop` the value was traced through. A `passthrough` always
-   * carries one; so does a `real` site whose value is a default that fired one
-   * level up, which is where the trace says *whose* default it was.
+   * `Component.prop` the value was traced through. A `passthrough` and a
+   * `silent` always carry one; so does a `real` site whose value is a default
+   * that fired one level up, which is where the trace says *whose* default it
+   * was.
    */
   readonly via?: string;
 }
