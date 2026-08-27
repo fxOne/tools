@@ -1,5 +1,5 @@
 import type * as TS from 'typescript';
-import { defaultedBindings, isExported, unwrapToFn } from './ast.js';
+import { defaultedBindings, isExported } from './ast.js';
 import { createClassifier } from './classify.js';
 import { createComponentFactory } from './component.js';
 import type { Component } from './component.js';
@@ -217,12 +217,12 @@ export function createAnalyzer({ cwd, program, ts }: AnalyzerOptions): Analyzer 
     return [];
   }
 
-  /** The component `export const C = memo(() => …)` binds, if it binds one. */
+  /** The component `export const C = memo(…)` binds, if it binds one. */
   function componentOfDeclaration(decl: TS.VariableDeclaration): Component | null {
     if (!ts.isIdentifier(decl.name) || !decl.initializer) {
       return null;
     }
-    const fn = unwrapToFn(ts, decl.initializer);
+    const fn = components.unwrap(decl.initializer);
     return fn ? components.fromNode(fn, decl.name) : null;
   }
 

@@ -5,6 +5,33 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.0.1
+
+Two ways a prop that every caller passes could be reported `caller-dead` —
+"inline the default, remove the prop" on live code. Both are corrections to the
+walk; nothing in the library API, the CLI arguments or the `--json` shape moved.
+
+- Fixed: `children` passed by JSX nesting was read as an omission. The value of
+  `children` is the one a call site writes *between* the tags rather than in the
+  attributes, and only the attributes were being read — so `<Panel><Body/>
+  </Panel>` counted as a caller that passes nothing, and a `children?` nested at
+  every call site came back `caller-dead`. Nesting now wins over both an
+  attribute of that name and any spread, matching what JSX itself does;
+  `<Panel>{slot}</Panel>` is a pass-through like any other, while whitespace
+  between the tags, a lone `{/* comment */}` and `<Panel></Panel>` correctly
+  reach nothing
+- Fixed: a component whose wrapper call only NAMES the function it wraps —
+  `function CardComponent(…) {}` plus `export const Card = memo(CardComponent)`,
+  the shape every wrapped component takes once it outgrows being written inline
+  — was two components to the walk. JSX renders `Card`, while a pass-through
+  climbing out of the body arrives at `CardComponent`, and the call sites filed
+  under the one name were invisible from the other. The climb ended on an empty
+  usage list, contributed nothing, and a prop that every caller passes came back
+  `caller-dead`: "delete the prop" on live code. The same gap made
+  `findComponents` skip such a file entirely, so pointing prop-flow at
+  `Card.tsx` reported no components at all. The wrapped function may live in
+  another file — `memo(CardImpl)` over an import resolves through the alias
+
 ## 3.0.0
 
 - **BREAKING CHANGE**: a file with no exported component is no longer a failure.

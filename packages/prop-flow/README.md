@@ -224,11 +224,27 @@ pass, so a prop that is only ever fed `undefined` still comes out as
 `caller-dead`. A conditional expression that can evaluate to `undefined` counts
 as a real source — the one false positive the tool accepts on purpose.
 
+`children` is read off the nesting, which is where JSX puts it rather than in
+the attributes. Nesting wins over an attribute of that name and over every
+spread, exactly as JSX resolves it: `<Panel children={a}>{b}</Panel>` passes
+`b`. A lone `<Panel>{slot}</Panel>` is a pass-through like any other value, so
+a forwarded `children` is traced to where it comes from. Whitespace between the
+tags, a lone `{/* comment */}` and `<Panel></Panel>` reach nothing and stay
+omissions.
+
 Components are picked up from `export function C`, `export const C = …`
 (including `memo()` / `forwardRef()` wrappers), `export default function C` and
 `export { C }` at the bottom of the file. A component re-exported through a
 barrel is still found at its call sites, but must be inspected in the file that
 declares it.
+
+A wrapper whose argument only *names* the function — `function CardComponent(…)
+{}` above `export const Card = memo(CardComponent)` — gives one component two
+names. Call sites are written as `<Card/>`, while a pass-through climbing out of
+the body arrives at `CardComponent`; both reach the same entry, so a prop fed
+through the wrapper is counted at every call site rather than at none of them.
+The wrapped function may sit in another file — `memo(CardImpl)` over an import
+is followed through the alias.
 
 An exported `useX` taking an options object is skipped. It is indistinguishable
 from a component to the AST and has no JSX call sites, so every one of its
