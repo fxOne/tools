@@ -43,6 +43,27 @@ export default [
 ];
 ```
 
+## Tailwind
+
+Apps built on `@fxone/ui` add the Tailwind rules. They keep every app on the
+one shared look — tokens instead of palette colours, the shared radii,
+weights and spacing scale — so a screen cannot quietly drift from the others.
+Pass the app's CSS entry, the file that imports `@fxone/ui-tailwind`:
+
+```js
+import config from '@fxone/eslint-config';
+import tailwind from '@fxone/eslint-config/tailwind';
+
+export default [
+    ...config,
+    ...tailwind({ entryPoint: 'apps/web/src/app.css' }),
+];
+```
+
+`files` (default `['**/*.tsx']`) narrows where the rules apply. Leave the
+shadcn primitives under `@fxone/ui`'s `components/ui/` out; they are tuned
+per mode on purpose.
+
 ## Formatting
 
 This config formats through `@stylistic/eslint-plugin` — `eslint --fix` is the
