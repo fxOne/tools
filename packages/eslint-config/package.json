@@ -2,14 +2,16 @@
   "author": "fxOne <fxOne@users.noreply.github.com>",
   "dependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
+    "eslint-plugin-better-tailwindcss": "^4.10.0",
     "eslint-plugin-react": "^7.37.5",
-    "eslint-plugin-react-hooks": "^7.0.1",
-    "eslint-plugin-sort-keys-shorthand": "^5.0.0",
-    "typescript-eslint": "^8.58.1"
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-sort-keys-shorthand": "^5.1.1",
+    "typescript-eslint": "^8.72.0"
   },
   "peerDependencies": {
     "@eslint/js": "^10.0.0",
     "eslint": "^10.0.0",
+    "tailwindcss": "^4.1.17",
     "typescript": "^5.0.0 || ^6.0.0"
   },
   "peerDependenciesMeta": {
@@ -19,11 +21,18 @@
     "eslint": {
       "optional": false
     },
+    "tailwindcss": {
+      "optional": true
+    },
     "typescript": {
       "optional": false
     }
   },
   "description": "eslint config",
+  "exports": {
+    ".": "./index.js",
+    "./tailwind": "./tailwind.js"
+  },
   "license": "MIT",
   "main": "index.js",
   "name": "@fxone/eslint-config",
@@ -33,5 +42,5 @@
   },
   "repository": "https://github.com/fxOne/tools.git",
   "type": "module",
-  "version": "5.0.0"
+  "version": "5.1.0"
 }

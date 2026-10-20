@@ -5,6 +5,19 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 5.1.0
+
+- Add `@fxone/eslint-config/tailwind`: the Tailwind rules for apps on
+  `@fxone/ui`, built on `eslint-plugin-better-tailwindcss`. It rejects what
+  breaks the one look the apps share — palette colours, `dark:` colour
+  overrides, faded text, arbitrary sizes and spacing, radii other than
+  `rounded-md` / `rounded-lg` / `rounded-full`, `font-bold`, wide tracking,
+  `space-*`, gradients — and folds `h-4 w-4` into `size-4`
+- Opt-in: the default export is unchanged; `tailwindcss` is an optional peer
+- Raise `typescript-eslint` to ^8.72.0, `eslint-plugin-react-hooks` to ^7.1.1
+  (its recommended set drops `component-hook-factories`, adds nothing) and
+  `eslint-plugin-sort-keys-shorthand` to ^5.1.1
+
 ## 5.0.0
 
 - **BREAKING CHANGE**: Move `@eslint/js` to peer dependencies
