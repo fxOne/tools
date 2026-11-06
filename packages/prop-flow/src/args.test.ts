@@ -7,6 +7,7 @@ describe('parseArgs', () => {
     expect(parseArgs(['src/Button.tsx'])).toEqual({
       allProps: false,
       file: 'src/Button.tsx',
+      files: ['src/Button.tsx'],
       help: false,
       json: false,
       prop: null,
@@ -17,11 +18,24 @@ describe('parseArgs', () => {
     ).toEqual({
       allProps: true,
       file: 'src/Button.tsx',
+      files: ['src/Button.tsx'],
       help: false,
       json: true,
       prop: 'title',
       tsconfig: 'tsconfig.base.json',
     });
+  });
+
+  it('reads several files, and no prop among them', () => {
+    expect(parseArgs(['--json', 'src/Button.tsx', 'src/Card.tsx', 'Page.tsx'])).toMatchObject({
+      file: 'src/Button.tsx',
+      files: ['src/Button.tsx', 'src/Card.tsx', 'Page.tsx'],
+      prop: null,
+    });
+  });
+
+  it('keeps a lone positional a file even when it reads like a prop', () => {
+    expect(parseArgs(['Button'])).toMatchObject({ files: ['Button'], prop: null });
   });
 
   it.each([['-h'], ['--help']])('treats %s as a help request', (flag) => {
@@ -44,7 +58,7 @@ describe('parseArgs', () => {
     [['--tsconfig'], /--tsconfig needs a path/],
     [['--tsconfig', '--json'], /--tsconfig needs a path/],
     [['--nope'], /Unknown option: --nope/],
-    [['a.tsx', 'prop', 'extra'], /Unexpected argument: extra/],
+    [['a.tsx', 'b.tsx', 'title'], /A prop name needs a single file; got 2 files and 'title'/],
   ])('rejects %j', (argv, message) => {
     expect(() => parseArgs(argv)).toThrow(PropFlowError);
     expect(() => parseArgs(argv)).toThrow(message);

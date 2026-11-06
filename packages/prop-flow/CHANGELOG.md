@@ -5,6 +5,16 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.2.0
+
+- Added: several files in one call — `prop-flow <file>... --json`. Files under
+  the same tsconfig share one Program, checker and call-site index, which were
+  the bulk of every run: a loop of single-file calls rebuilt them per file. A
+  file that fails is reported as `{"error", "file"}` in the `--json` stream (or
+  a stderr line) and the batch carries on; the call exits `2` if any file
+  failed. A `propName` still works, with a single file. The library gains
+  `analyseFiles`, which returns one outcome per file
+
 ## 3.1.0
 
 Three corrections to one failure: a prop that every caller passes, reported

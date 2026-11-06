@@ -5,9 +5,14 @@ export interface CliArgs {
   readonly help: boolean;
   readonly json: boolean;
   readonly tsconfig: string | null;
+  /** The first of `files`, for callers that only ever pass one. */
   readonly file: string | null;
+  readonly files: readonly string[];
   readonly prop: string | null;
 }
+
+/** A prop name is a bare identifier; anything with a dot or a slash is a path. */
+const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
 
 export function parseArgs(argv: readonly string[]): CliArgs {
   const positional: string[] = [];
@@ -41,9 +46,14 @@ export function parseArgs(argv: readonly string[]): CliArgs {
     }
   }
 
-  if (positional.length > 2) {
-    throw new PropFlowError(`Unexpected argument: ${positional[2] ?? ''}`);
+  // The first positional is always a file, so `prop-flow Button` still reports
+  // a missing file rather than a prop without one.
+  const last = positional.at(-1);
+  const prop = positional.length > 1 && last !== undefined && IDENTIFIER.test(last) ? last : null;
+  const files = prop === null ? positional : positional.slice(0, -1);
+  if (prop !== null && files.length > 1) {
+    throw new PropFlowError(`A prop name needs a single file; got ${files.length} files and '${prop}'.`);
   }
 
-  return { allProps, help, json, tsconfig, file: positional[0] ?? null, prop: positional[1] ?? null };
+  return { allProps, files, help, json, prop, tsconfig, file: files[0] ?? null };
 }

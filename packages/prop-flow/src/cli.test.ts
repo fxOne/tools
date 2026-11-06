@@ -16,6 +16,14 @@ class Capture implements OutputStream {
   }
 }
 
+/** The objects of a `--json` batch, which prints one pretty-printed object per file. */
+function jsonStream(text: string): Record<string, unknown>[] {
+  return text
+    .trim()
+    .split(/\n(?=\{)/)
+    .map((chunk) => JSON.parse(chunk) as Record<string, unknown>);
+}
+
 function run(argv: string[]): { code: number; stderr: string; stdout: string } {
   const stdout = new Capture();
   const stderr = new Capture();
@@ -101,6 +109,48 @@ describe('runCli', () => {
     expect(code).toBe(2);
     expect(stderr).toBe('');
     expect(JSON.parse(stdout)).toEqual({ error: 'Unknown option: --nope' });
+  });
+
+  it('analyses several files in one call on one Program', () => {
+    // The batch exists for this: a loop of single-file calls built the
+    // Program, checker and usage index once per file.
+    let programs = 0;
+    const counting = {
+      ...ts,
+      createProgram: (...args: Parameters<typeof ts.createProgram>) => {
+        programs += 1;
+        return ts.createProgram(...args);
+      },
+    } as unknown as TypeScriptApi;
+    const stdout = new Capture();
+    const stderr = new Capture();
+
+    const code = runCli(['--json', 'button.tsx', 'app.tsx', 'constant.tsx'], {
+      stderr,
+      stdout,
+      cwd: FIXTURE_DIR,
+      ts: counting,
+    });
+
+    expect(code).toBe(0);
+    expect(programs).toBe(1);
+    expect(jsonStream(stdout.text).map((report) => report.file)).toEqual(['button.tsx', 'app.tsx', 'constant.tsx']);
+  });
+
+  it('keeps going past a file that fails, and exits 2 for it', () => {
+    const json = run(['--json', 'button.tsx', 'missing.tsx', 'app.tsx']);
+    const text = run(['button.tsx', 'missing.tsx', 'app.tsx']);
+
+    expect(json.code).toBe(2);
+    expect(jsonStream(json.stdout)).toEqual([
+      expect.objectContaining({ file: 'button.tsx' }),
+      { error: expect.stringContaining('File not found') as string, file: 'missing.tsx' },
+      expect.objectContaining({ file: 'app.tsx' }),
+    ]);
+    expect(text.code).toBe(2);
+    expect(text.stderr).toContain('prop-flow: File not found: ');
+    expect(text.stdout).toContain('file:     button.tsx');
+    expect(text.stdout).toContain('file:     app.tsx');
   });
 
   it('prints usage on --help and exits 0', () => {
