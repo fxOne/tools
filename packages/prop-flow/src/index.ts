@@ -6,8 +6,8 @@ export { runCli, USAGE } from './cli.js';
 export type { CliContext, OutputStream } from './cli.js';
 export type { Component } from './component.js';
 export { PropFlowError } from './errors.js';
-export { analyseProps } from './prop-flow.js';
-export type { AnalyseOptions } from './prop-flow.js';
+export { analyseFiles, analyseProps } from './prop-flow.js';
+export type { AnalyseFilesOptions, AnalyseOptions, FileOutcome } from './prop-flow.js';
 export { formatJson, formatJsonError, formatText } from './report.js';
 export { discoverTsconfig, readTsConfig } from './tsconfig.js';
 export type {

@@ -1,6 +1,6 @@
 import { parseArgs } from './args.js';
 import { PropFlowError } from './errors.js';
-import { analyseProps } from './prop-flow.js';
+import { analyseFiles } from './prop-flow.js';
 import { formatJson, formatJsonError, formatText } from './report.js';
 import type { TypeScriptApi } from './typescript-api.js';
 
@@ -17,10 +17,11 @@ export interface CliContext {
 }
 
 export const USAGE =
-  'Usage: prop-flow <file> [propName] [--tsconfig <path>] [--all-props] [--json]\n\n' +
-  '  <file>       a .ts/.tsx file containing the component(s) to inspect\n' +
-  '  [propName]   one prop; omitted → every optional prop of every component\n' +
-  '               exported from the file\n' +
+  'Usage: prop-flow <file>... [propName] [--tsconfig <path>] [--all-props] [--json]\n\n' +
+  '  <file>...    .ts/.tsx files containing the component(s) to inspect; files\n' +
+  '               under one tsconfig share one Program, so pass them together\n' +
+  '  [propName]   one prop (single file only); omitted → every optional prop\n' +
+  '               of every component exported from the file\n' +
   '  --tsconfig   override the auto-discovered tsconfig (use the broadest\n' +
   '               "solution" config so call sites in other packages are seen)\n' +
   '  --all-props  inspect required props too, reported only where they are\n' +
@@ -32,7 +33,7 @@ export const USAGE =
 
 /**
  * Exit codes: 0 ok — including a file with nothing to analyse — 1 nothing to do
- * (usage printed), 2 a handled failure.
+ * (usage printed), 2 a handled failure, on any one of the files.
  */
 export function runCli(argv: readonly string[], context: CliContext): number {
   // One read of the flag, and off the raw argv rather than off the parsed args:
@@ -45,16 +46,29 @@ export function runCli(argv: readonly string[], context: CliContext): number {
       context.stdout.write(USAGE);
       return args.help ? 0 : 1;
     }
-    const report = analyseProps({
+    const outcomes = analyseFiles({
       allProps: args.allProps,
       cwd: context.cwd,
-      file: args.file,
+      files: args.files,
       prop: args.prop,
       ts: context.ts,
       tsconfig: args.tsconfig,
     });
-    context.stdout.write(json ? formatJson(report) : formatText(report));
-    return 0;
+    let failed = false;
+    outcomes.forEach((outcome, index) => {
+      if ('report' in outcome) {
+        const separator = !json && index > 0 ? '\n' : '';
+        context.stdout.write(separator + (json ? formatJson(outcome.report) : formatText(outcome.report)));
+        return;
+      }
+      failed = true;
+      if (json) {
+        context.stdout.write(formatJsonError(outcome.error, outcome.file));
+      } else {
+        context.stderr.write(`prop-flow: ${outcome.error}\n`);
+      }
+    });
+    return failed ? 2 : 0;
   } catch (error) {
     if (error instanceof PropFlowError) {
       if (json) {

@@ -13,7 +13,11 @@ import type { TypeScriptApi } from './typescript-api.js';
  * and otherwise walks up from the file. Of all candidates the first one whose
  * parsed file set really contains the file wins.
  */
-export function discoverTsconfig(ts: TypeScriptApi, file: string): string | null {
+export function discoverTsconfig(
+  ts: TypeScriptApi,
+  file: string,
+  read: (configPath: string) => TS.ParsedCommandLine = (configPath) => readTsConfig(ts, configPath),
+): string | null {
   const gitRoot = findUp(dirname(file), '.git');
   const candidates: string[] = [];
   if (gitRoot) {
@@ -38,7 +42,7 @@ export function discoverTsconfig(ts: TypeScriptApi, file: string): string | null
 
   for (const candidate of candidates) {
     try {
-      const parsed = readTsConfig(ts, candidate);
+      const parsed = read(candidate);
       if (parsed.fileNames.some((name) => resolve(name) === resolve(file))) {
         return candidate;
       }

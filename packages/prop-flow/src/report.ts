@@ -26,8 +26,9 @@ export function formatJson(report: Report): string {
  * `jq`: a bare error line in the middle of the stream would break the parse for
  * every other file too.
  */
-export function formatJsonError(message: string): string {
-  return `${JSON.stringify({ error: message }, null, 2)}\n`;
+export function formatJsonError(message: string, file?: string): string {
+  // `file` names which one failed in a batch; a bad argv has no file to name.
+  return `${JSON.stringify(file === undefined ? { error: message } : { error: message, file }, null, 2)}\n`;
 }
 
 export function formatText(report: Report): string {
