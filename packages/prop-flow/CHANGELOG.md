@@ -5,6 +5,8 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## To Be Released
 
+## 3.2.0
+
 - Added: several files in one call — `prop-flow <file>... --json`. Files under
   the same tsconfig share one Program, checker and call-site index, which were
   the bulk of every run: a loop of single-file calls rebuilt them per file. A
